@@ -52,17 +52,7 @@ def build_snapshot(
     if package_json is None:
         raise LoaderError(f"version {version!r} not found for package {package!r}")
 
-    time_map = packument.get("time", {})
-    published_at_raw = time_map.get(version)
-    if published_at_raw is None:
-        raise LoaderError(f"publish timestamp not found for {package!r}@{version!r}")
-
-    try:
-        published_at = datetime.fromisoformat(published_at_raw.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise LoaderError(
-            f"invalid publish timestamp {published_at_raw!r} for {package!r}@{version!r}: {exc}"
-        ) from exc
+    published_at = get_publish_time(packument, package, version)
 
     source_dir = _download_and_extract_tarball(package, version, package_json) if include_source else None
 
@@ -73,6 +63,28 @@ def build_snapshot(
         package_json=package_json,
         source_dir=source_dir,
     )
+
+
+def get_publish_time(packument: dict[str, Any], package: str, version: str) -> datetime:
+    """packument의 time 맵에서 특정 version의 publish 시각을 읽는다.
+
+    npm registry는 버전이 unpublish되어 versions[version]이 사라진 뒤에도
+    time[version]은 계속 보존하는 것으로 확인되어(2026-09 시점 관찰),
+    로컬 archive 기반 snapshot에서도 이 함수로 timestamp를 얻을 수 있다.
+    다만 이는 registry의 공식 계약이 아니라 관찰된 동작이므로, 값이 없으면
+    임의로 채우지 않고 LoaderError를 그대로 전파한다.
+    """
+    time_map = packument.get("time", {})
+    published_at_raw = time_map.get(version)
+    if published_at_raw is None:
+        raise LoaderError(f"publish timestamp not found for {package!r}@{version!r}")
+
+    try:
+        return datetime.fromisoformat(published_at_raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise LoaderError(
+            f"invalid publish timestamp {published_at_raw!r} for {package!r}@{version!r}: {exc}"
+        ) from exc
 
 
 def _download_and_extract_tarball(package: str, version: str, package_json: dict[str, Any]) -> Path:

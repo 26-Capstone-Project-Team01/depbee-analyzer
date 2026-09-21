@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from feature_extractor.core.errors import FeatureExtractorError
+from feature_extractor.core.local_dataset import run_local_archive_batch
 from feature_extractor.core.pipeline import build_row, resolve_extractors, run_batch
 
 
@@ -64,6 +65,35 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_extractors_argument(batch)
 
+    batch_local = subparsers.add_parser(
+        "batch-local",
+        help=(
+            "npm-malware-package-pairs 로컬 클론에서 registry에서 이미 삭제된 "
+            "악성 pair를 읽어 dataset.csv를 생성한다 (label은 항상 1)"
+        ),
+    )
+    batch_local.add_argument(
+        "--archive-root",
+        required=True,
+        type=Path,
+        help="npm-malware-package-pairs를 로컬에 클론한 경로 (<campaign>/<package>/meta.json 구조)",
+    )
+    batch_local.add_argument("--output", required=True, type=Path, dest="output_csv_path")
+    batch_local.add_argument(
+        "--errors-output",
+        type=Path,
+        dest="errors_csv_path",
+        default=None,
+        help="생략하면 --output과 같은 디렉터리에 dataset.errors.csv로 생성한다",
+    )
+    batch_local.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="처리할 최대 pair 수. 전체 dataset을 생성하기 전 소수로 먼저 검증할 때 사용",
+    )
+    _add_extractors_argument(batch_local)
+
     return parser
 
 
@@ -89,6 +119,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "batch":
         errors_csv_path = args.errors_csv_path or args.output_csv_path.with_name("dataset.errors.csv")
         run_batch(args.pairs_file, args.output_csv_path, errors_csv_path, extractors)
+        return 0
+
+    if args.command == "batch-local":
+        errors_csv_path = args.errors_csv_path or args.output_csv_path.with_name("dataset.errors.csv")
+        run_local_archive_batch(
+            args.archive_root, args.output_csv_path, errors_csv_path, extractors, limit=args.limit
+        )
         return 0
 
     parser.error(f"unknown command {args.command!r}")

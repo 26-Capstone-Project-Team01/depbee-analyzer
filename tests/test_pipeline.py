@@ -39,7 +39,7 @@ def test_resolve_extractors_unknown_name_raises_value_error() -> None:
         resolve_extractors(["does_not_exist"])
 
 
-@patch("feature_extractor.core.pipeline.fetch_packument")
+@patch("feature_extractor.core.sources.fetch_packument")
 def test_build_row_merges_extractor_output_with_label(mock_fetch_packument) -> None:
     mock_fetch_packument.return_value = PACKUMENT
     extractors = resolve_extractors(["package_json"])
@@ -75,7 +75,7 @@ def test_build_row_raises_on_duplicate_feature_names() -> None:
         ) -> dict[str, Any]:
             return {"shared_key": 2}
 
-    with patch("feature_extractor.core.pipeline.fetch_packument", return_value=PACKUMENT):
+    with patch("feature_extractor.core.sources.fetch_packument", return_value=PACKUMENT):
         with pytest.raises(FeatureExtractorError):
             build_row(
                 "sample-pkg",
@@ -86,7 +86,7 @@ def test_build_row_raises_on_duplicate_feature_names() -> None:
             )
 
 
-@patch("feature_extractor.core.pipeline.fetch_packument")
+@patch("feature_extractor.core.sources.fetch_packument")
 def test_run_batch_writes_dataset_and_records_errors(mock_fetch_packument, tmp_path: Path) -> None:
     mock_fetch_packument.return_value = PACKUMENT
 

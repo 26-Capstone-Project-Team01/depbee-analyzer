@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Iterable
 
 from feature_extractor.core.errors import FeatureExtractorError
-from feature_extractor.core.loader import build_snapshot, fetch_packument
 from feature_extractor.core.models import FeatureRow
 from feature_extractor.core.output import append_error, write_dataset
+from feature_extractor.core.sources import RegistrySnapshotSource, SnapshotSource
 from feature_extractor.extractors import EXTRACTOR_REGISTRY
 from feature_extractor.extractors.base import BaseExtractor
 
@@ -33,20 +33,37 @@ def build_row(
     new_version: str,
     label: int,
     extractors: list[BaseExtractor],
+    *,
+    old_source: SnapshotSource | None = None,
+    new_source: SnapshotSource | None = None,
 ) -> FeatureRow:
-    """단일 package pair에 대해 선택된 extractor 전체를 실행해 FeatureRow를 만든다."""
+    """단일 package pair에 대해 선택된 extractor 전체를 실행해 FeatureRow를 만든다.
+
+    old_source/new_source를 지정하지 않으면(기본값) 기존과 동일하게 npm registry에서
+    조회한다 (RegistrySnapshotSource, 이 경우 하나의 인스턴스를 old/new가 공유해
+    packument를 package당 1번만 fetch한다). npm-malware-package-pairs처럼 registry에서
+    삭제된 버전을 다루려면 LocalArchiveSnapshotSource 등 다른 SnapshotSource를 명시적으로
+    넘긴다 — 이 함수와 PackageJsonExtractor 자체는 어느 쪽이든 변경 없이 그대로 쓰인다.
+    """
     if old_version == new_version:
         raise FeatureExtractorError(
             f"old_version and new_version are identical ({old_version!r}) for package {package!r}"
         )
 
+    if old_source is None and new_source is None:
+        shared_registry_source = RegistrySnapshotSource()
+        old_source = shared_registry_source
+        new_source = shared_registry_source
+    else:
+        old_source = old_source or RegistrySnapshotSource()
+        new_source = new_source or RegistrySnapshotSource()
+
     # 선택된 extractor들이 필요로 하는 데이터의 합집합만큼만 loader에게 요청한다.
     # (예: package_json extractor만 선택되면 tarball을 내려받지 않는다.)
     needs_source = any("source" in extractor.required_data for extractor in extractors)
 
-    packument = fetch_packument(package)
-    old_snapshot = build_snapshot(packument, package, old_version, include_source=needs_source)
-    new_snapshot = build_snapshot(packument, package, new_version, include_source=needs_source)
+    old_snapshot = old_source.get_snapshot(package, old_version, include_source=needs_source)
+    new_snapshot = new_source.get_snapshot(package, new_version, include_source=needs_source)
 
     features: dict[str, object] = {}
     for extractor in extractors:
@@ -92,7 +109,7 @@ def run_batch(
             except FeatureExtractorError as exc:
                 append_error(
                     errors_csv_path,
-                    line_number=line_number,
+                    source_ref=str(line_number),
                     package=package,
                     old_version=old_version,
                     new_version=new_version,
