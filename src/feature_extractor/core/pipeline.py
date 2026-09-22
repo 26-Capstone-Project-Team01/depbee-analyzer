@@ -6,7 +6,7 @@ from typing import Iterable
 
 from feature_extractor.core.errors import FeatureExtractorError
 from feature_extractor.core.models import FeatureRow
-from feature_extractor.core.output import append_error, write_dataset
+from feature_extractor.core.output import append_error, prepare_outputs, write_dataset
 from feature_extractor.core.sources import RegistrySnapshotSource, SnapshotSource
 from feature_extractor.extractors import EXTRACTOR_REGISTRY
 from feature_extractor.extractors.base import BaseExtractor
@@ -95,9 +95,13 @@ def run_batch(
 
     개별 pair 처리 중 오류가 나도 batch 전체를 중단하지 않고, 해당 pair를
     errors_csv_path에 기록한 뒤 나머지 pair 처리를 계속한다.
+
+    이전 실행의 결과 파일은 pairs 파일을 연 뒤에 비운다. pairs 경로를 잘못 넣으면
+    여기서 먼저 실패하므로 이전 결과가 지워지지 않는다.
     """
     rows: list[FeatureRow] = []
     with pairs_csv_path.open(newline="", encoding="utf-8") as f:
+        prepare_outputs(output_csv_path, errors_csv_path)
         reader = csv.DictReader(f)
         for line_number, row in enumerate(reader, start=2):  # 헤더가 1행이므로 데이터는 2행부터
             package = row["package"]

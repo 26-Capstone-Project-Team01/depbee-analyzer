@@ -7,7 +7,7 @@ from typing import Any, Iterator
 from feature_extractor.core.errors import FeatureExtractorError
 from feature_extractor.core.loader import fetch_packument
 from feature_extractor.core.models import FeatureRow
-from feature_extractor.core.output import append_error, write_dataset
+from feature_extractor.core.output import append_error, prepare_outputs, write_dataset
 from feature_extractor.core.pipeline import build_row
 from feature_extractor.core.sources import LocalArchiveSnapshotSource
 from feature_extractor.extractors.base import BaseExtractor
@@ -70,7 +70,20 @@ def run_local_archive_batch(
     채우지 않고) 해당 pair를 errors_csv_path에 남기고 계속 진행한다.
 
     limit은 전체 dataset을 생성하기 전 소수의 pair로 먼저 검증할 때 쓰는 용도다.
+
+    이전 실행의 결과 파일은 archive_root를 확인한 뒤에 비운다. 경로를 잘못 넣었거나
+    archive의 상위 디렉터리를 가리키면 pair가 0개로 끝나면서 이전 결과만 지우게 되므로,
+    그 전에 FileNotFoundError를 낸다.
     """
+    if not archive_root.is_dir():
+        raise FileNotFoundError(f"archive root is not a directory: {archive_root}")
+    if next(archive_root.glob("*/*/meta.json"), None) is None:
+        raise FileNotFoundError(
+            f"no <campaign>/<package>/meta.json found under {archive_root}; "
+            "is this the root of an npm-malware-package-pairs clone?"
+        )
+    prepare_outputs(output_csv_path, errors_csv_path)
+
     rows: list[FeatureRow] = []
     processed = 0
 

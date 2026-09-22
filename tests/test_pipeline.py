@@ -178,3 +178,73 @@ def test_run_batch_writes_dataset_and_records_errors(mock_fetch_packument, tmp_p
     assert len(error_rows) == 1
     assert error_rows[0]["old_version"] == "1.0.0"
     assert error_rows[0]["new_version"] == "1.0.0"
+
+
+def _read_dict_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+@patch("feature_extractor.core.sources.fetch_packument")
+def test_run_batch_rerun_to_same_paths_does_not_accumulate_errors(
+    mock_fetch_packument, tmp_path: Path
+) -> None:
+    """같은 출력 경로로 다시 돌려도 dataset과 errors가 한 실행분의 짝으로 남아야 한다."""
+    mock_fetch_packument.return_value = PACKUMENT
+    pairs_csv = tmp_path / "pairs.csv"
+    pairs_csv.write_text(
+        "package,old_version,new_version,label\n"
+        "sample-pkg,1.0.0,1.0.1,1\n"
+        "sample-pkg,1.0.0,1.0.0,0\n",
+        encoding="utf-8",
+    )
+    output_csv = tmp_path / "dataset.csv"
+    errors_csv = tmp_path / "dataset.errors.csv"
+    extractors = resolve_extractors(["package_json"])
+
+    run_batch(pairs_csv, output_csv, errors_csv, extractors)
+    run_batch(pairs_csv, output_csv, errors_csv, extractors)
+
+    assert len(_read_dict_rows(output_csv)) == 1
+    assert len(_read_dict_rows(errors_csv)) == 1
+
+
+@patch("feature_extractor.core.sources.fetch_packument")
+def test_run_batch_where_every_pair_fails_clears_previous_dataset(
+    mock_fetch_packument, tmp_path: Path
+) -> None:
+    """모든 pair가 실패한 실행 뒤에 이전 실행의 dataset.csv가 남아 있으면 안 된다."""
+    mock_fetch_packument.return_value = PACKUMENT
+    output_csv = tmp_path / "dataset.csv"
+    errors_csv = tmp_path / "dataset.errors.csv"
+    extractors = resolve_extractors(["package_json"])
+
+    good_pairs = tmp_path / "good.csv"
+    good_pairs.write_text(
+        "package,old_version,new_version,label\nsample-pkg,1.0.0,1.0.1,1\n", encoding="utf-8"
+    )
+    run_batch(good_pairs, output_csv, errors_csv, extractors)
+    assert len(_read_dict_rows(output_csv)) == 1
+
+    failing_pairs = tmp_path / "failing.csv"
+    failing_pairs.write_text(
+        "package,old_version,new_version,label\nsample-pkg,1.0.0,1.0.0,0\n", encoding="utf-8"
+    )
+    run_batch(failing_pairs, output_csv, errors_csv, extractors)
+
+    assert output_csv.read_bytes() == b""
+    assert len(_read_dict_rows(errors_csv)) == 1
+
+
+def test_run_batch_with_missing_pairs_file_keeps_previous_outputs(tmp_path: Path) -> None:
+    """pairs 경로를 잘못 넣은 실행이 이전 결과를 지우면 안 된다."""
+    output_csv = tmp_path / "dataset.csv"
+    errors_csv = tmp_path / "dataset.errors.csv"
+    output_csv.write_text("previous dataset\n", encoding="utf-8")
+    errors_csv.write_text("previous errors\n", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError):
+        run_batch(tmp_path / "typo.csv", output_csv, errors_csv, resolve_extractors(["package_json"]))
+
+    assert output_csv.read_text(encoding="utf-8") == "previous dataset\n"
+    assert errors_csv.read_text(encoding="utf-8") == "previous errors\n"

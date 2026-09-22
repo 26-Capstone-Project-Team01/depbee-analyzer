@@ -9,6 +9,16 @@ from feature_extractor.core.local_dataset import run_local_archive_batch
 from feature_extractor.core.pipeline import build_row, resolve_extractors, run_batch
 
 
+#: batch 명령의 입력·출력 경로 문제로 발생하는 예외. 파일이 없거나(FileNotFoundError),
+#: 디렉터리와 파일을 혼동했거나(IsADirectoryError/NotADirectoryError, Windows에서는
+#: 디렉터리를 파일로 열면 PermissionError), 쓰기 권한이 없는 경우다.
+#: pair 단위 추출 실패(FeatureExtractorError)는 batch 안에서 errors.csv로 가므로 여기 해당하지 않는다.
+_PATH_ERRORS = (FileNotFoundError, IsADirectoryError, NotADirectoryError, PermissionError)
+
+#: 인자로 받은 경로가 잘못된 경우의 종료 코드. argparse가 잘못된 인자에 쓰는 값과 같다.
+EXIT_INVALID_INPUT = 2
+
+
 def _split_extractor_names(value: str) -> list[str]:
     return [name.strip() for name in value.split(",") if name.strip()]
 
@@ -118,14 +128,22 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "batch":
         errors_csv_path = args.errors_csv_path or args.output_csv_path.with_name("dataset.errors.csv")
-        run_batch(args.pairs_file, args.output_csv_path, errors_csv_path, extractors)
+        try:
+            run_batch(args.pairs_file, args.output_csv_path, errors_csv_path, extractors)
+        except _PATH_ERRORS as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_INVALID_INPUT
         return 0
 
     if args.command == "batch-local":
         errors_csv_path = args.errors_csv_path or args.output_csv_path.with_name("dataset.errors.csv")
-        run_local_archive_batch(
-            args.archive_root, args.output_csv_path, errors_csv_path, extractors, limit=args.limit
-        )
+        try:
+            run_local_archive_batch(
+                args.archive_root, args.output_csv_path, errors_csv_path, extractors, limit=args.limit
+            )
+        except _PATH_ERRORS as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_INVALID_INPUT
         return 0
 
     parser.error(f"unknown command {args.command!r}")
