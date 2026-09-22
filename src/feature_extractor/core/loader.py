@@ -41,11 +41,16 @@ def build_snapshot(
     version: str,
     *,
     include_source: bool = False,
+    source_parent_dir: Path | None = None,
 ) -> PackageVersionSnapshot:
     """packument에서 특정 version의 데이터를 뽑아 PackageVersionSnapshot을 만든다.
 
     include_source=True일 때만 tarball을 내려받는다 (선택된 extractor 중
     required_data에 "source"가 있는 경우에만 pipeline이 True를 넘긴다).
+
+    압축은 source_parent_dir 아래의 새 하위 디렉터리에 푼다. 이 함수는 푼 파일을 지우지
+    않으므로, 호출부가 source_parent_dir을 정리해야 한다(RegistrySnapshotSource.close()).
+    생략하면 시스템 임시 디렉터리에 풀리고 아무도 지우지 않는다.
     """
     versions = packument.get("versions", {})
     package_json = versions.get(version)
@@ -54,7 +59,9 @@ def build_snapshot(
 
     published_at = get_publish_time(packument, package, version)
 
-    source_dir = _download_and_extract_tarball(package, version, package_json) if include_source else None
+    source_dir = (
+        _download_and_extract_tarball(package, version, package_json, source_parent_dir) if include_source else None
+    )
 
     return PackageVersionSnapshot(
         package=package,
@@ -87,7 +94,9 @@ def get_publish_time(packument: dict[str, Any], package: str, version: str) -> d
         ) from exc
 
 
-def _download_and_extract_tarball(package: str, version: str, package_json: dict[str, Any]) -> Path:
+def _download_and_extract_tarball(
+    package: str, version: str, package_json: dict[str, Any], parent_dir: Path | None
+) -> Path:
     tarball_url = package_json.get("dist", {}).get("tarball")
     if not tarball_url:
         raise LoaderError(f"tarball url missing from dist for {package!r}@{version!r}")
@@ -98,7 +107,7 @@ def _download_and_extract_tarball(package: str, version: str, package_json: dict
     except requests.RequestException as exc:
         raise LoaderError(f"failed to download tarball for {package!r}@{version!r}: {exc}") from exc
 
-    extract_dir = Path(tempfile.mkdtemp(prefix="feature_extractor_src_"))
+    extract_dir = Path(tempfile.mkdtemp(prefix="feature_extractor_src_", dir=parent_dir))
     try:
         with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as tar:
             # 외부(신뢰할 수 없는) tarball이므로 path traversal 방지를 위해 "data" filter로 추출한다.

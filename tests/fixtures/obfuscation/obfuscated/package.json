@@ -1,0 +1,9 @@
+{
+  "name": "sample-pkg",
+  "version": "1.0.1",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test/run.js",
+    "postinstall": "node index.js"
+  }
+}

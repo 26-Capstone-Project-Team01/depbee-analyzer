@@ -31,7 +31,16 @@ feature-extractor batch \
 
 `--extractors`는 개발/디버깅 중 특정 extractor만 실행하고 싶을 때만 사용하는 옵션이며, 생략하면 `feature_extractor.extractors.EXTRACTOR_REGISTRY`에 등록된 모든 extractor가 실행됩니다.
 
+`obfuscation` extractor는 소스 코드가 필요하므로, 기본 실행 시 `batch`는 pair마다 두 버전의 tarball을 registry에서 내려받습니다. 받은 tarball은 pair 처리가 끝나면 지웁니다. package.json feature만 필요하면 `--extractors package_json`으로 다운로드를 건너뛸 수 있습니다. `batch-local`은 archive에 있는 소스를 읽으므로 tarball을 받지 않습니다.
+
 `pairs.csv` 스키마: `package,old_version,new_version,label`
+
+## 현재 상태
+
+| extractor | 상태 |
+| --- | --- |
+| `package_json` | 구현 완료, registry 등록됨 |
+| `obfuscation` | 구현 완료, registry 등록됨. 난독화 지표 8개를 새 버전 전체(`...New`), 이전 대비 변화(`...Change`), 변경된 코드(`...ChangedCode`) 세 가지로 냅니다(`obf` 접두어, 25개 컬럼). 지표 선정 근거와 평가는 [docs/obfuscation-features.md](docs/obfuscation-features.md) 참고 |
 
 ## 새 extractor 추가하기
 

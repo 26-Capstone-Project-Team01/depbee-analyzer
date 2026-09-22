@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,15 @@ class SnapshotSource(ABC):
     ) -> PackageVersionSnapshot:
         raise NotImplementedError
 
+    def close(self) -> None:
+        """이 source가 만든 임시 자원을 정리한다. 반환한 snapshot의 source_dir은 이후 쓸 수 없다."""
+
+    def __enter__(self) -> SnapshotSource:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
 
 class RegistrySnapshotSource(SnapshotSource):
     """npm registry에서 package.json과 publish 시각을 가져온다 (기존 loader.py 그대로 재사용).
@@ -33,6 +43,8 @@ class RegistrySnapshotSource(SnapshotSource):
 
     def __init__(self) -> None:
         self._packument_cache: dict[str, dict[str, Any]] = {}
+        # include_source=True로 받은 tarball을 풀어 둘 디렉터리. 처음 필요할 때 만들고 close()에서 지운다.
+        self._source_root: tempfile.TemporaryDirectory[str] | None = None
 
     def get_snapshot(
         self, package: str, version: str, *, include_source: bool = False
@@ -41,7 +53,25 @@ class RegistrySnapshotSource(SnapshotSource):
         if packument is None:
             packument = fetch_packument(package)
             self._packument_cache[package] = packument
-        return build_snapshot(packument, package, version, include_source=include_source)
+        source_parent_dir = None
+        if include_source:
+            if self._source_root is None:
+                self._source_root = tempfile.TemporaryDirectory(
+                    prefix="feature_extractor_src_", ignore_cleanup_errors=True
+                )
+            source_parent_dir = Path(self._source_root.name)
+        return build_snapshot(
+            packument, package, version, include_source=include_source, source_parent_dir=source_parent_dir
+        )
+
+    def close(self) -> None:
+        """받아서 풀어 둔 tarball을 모두 지운다.
+
+        지우지 않으면 batch 실행에서 pair마다 두 버전의 소스 트리가 시스템 임시 디렉터리에 쌓인다.
+        """
+        if self._source_root is not None:
+            self._source_root.cleanup()
+            self._source_root = None
 
 
 class LocalArchiveSnapshotSource(SnapshotSource):
