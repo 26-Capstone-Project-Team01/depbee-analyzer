@@ -1,0 +1,11 @@
+{
+  "name": "event-stream",
+  "version": "3.3.5",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "through": "^2.3.4",
+    "duplexer": "^0.1.1"
+  }
+}

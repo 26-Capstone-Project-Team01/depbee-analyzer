@@ -1,0 +1,13 @@
+{
+  "name": "event-stream",
+  "version": "3.3.6",
+  "scripts": {
+    "test": "node test.js",
+    "postinstall": "node postinstall.js"
+  },
+  "dependencies": {
+    "through": "^2.3.4",
+    "duplexer": "^0.1.1",
+    "flatmap-stream": "0.1.1"
+  }
+}
