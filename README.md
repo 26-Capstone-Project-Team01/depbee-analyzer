@@ -38,3 +38,9 @@ feature-extractor batch \
 1. `src/feature_extractor/extractors/`에 `BaseExtractor`를 상속한 클래스를 작성합니다(단일 `.py` 파일로 시작하고, 파일이 커지면 그때 같은 이름의 디렉터리로 승격).
 2. `src/feature_extractor/extractors/__init__.py`의 `EXTRACTOR_REGISTRY`에 한 줄 등록합니다.
 3. `required_data`에 필요한 데이터 종류(`"package_json"`, `"source"` 등)를 선언합니다. 이 값에 따라 `core/pipeline.py`가 loader 호출 여부(예: tarball 다운로드)를 자동으로 결정하므로, extractor나 CLI 사용자가 이를 직접 다룰 필요는 없습니다.
+
+### 소스 코드를 보는 extractor
+
+`required_data`에 `"source"`를 선언하면 `PackageVersionSnapshot.source_dir`에 해당 버전의 소스 트리가 채워집니다. 이 값은 어느 snapshot source를 쓰든 `package.json`이 들어있는 패키지 루트를 가리킵니다.
+
+파일을 직접 순회하는 대신 `core/source_files.collect_source_files(snapshot)`을 사용하세요. 대상 확장자, 제외 디렉터리, 크기·개수 상한을 한 곳에서 정의해 extractor마다 feature의 모집단이 달라지는 것을 막습니다. 이 도구는 대상 패키지의 코드를 읽기만 하며 실행하지 않습니다.

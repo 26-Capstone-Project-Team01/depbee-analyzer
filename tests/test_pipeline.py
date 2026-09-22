@@ -11,6 +11,7 @@ import pytest
 from feature_extractor.core.errors import FeatureExtractorError
 from feature_extractor.core.models import PackageVersionSnapshot
 from feature_extractor.core.pipeline import build_row, resolve_extractors, run_batch
+from feature_extractor.core.sources import SnapshotSource
 from feature_extractor.extractors.base import BaseExtractor
 
 PACKUMENT = {
@@ -84,6 +85,70 @@ def test_build_row_raises_on_duplicate_feature_names() -> None:
                 label=0,
                 extractors=[FakeExtractorA(), FakeExtractorB()],
             )
+
+
+class _RecordingSource(SnapshotSource):
+    """get_snapshot()에 넘어온 include_source 값을 기록하는 테스트용 source."""
+
+    def __init__(self) -> None:
+        self.include_source_calls: list[bool] = []
+
+    def get_snapshot(
+        self, package: str, version: str, *, include_source: bool = False
+    ) -> PackageVersionSnapshot:
+        self.include_source_calls.append(include_source)
+        return PackageVersionSnapshot(
+            package=package,
+            version=version,
+            published_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            package_json={"name": package, "version": version},
+            source_dir=None,
+        )
+
+
+class _NoSourceExtractor(BaseExtractor):
+    name = "no_source"
+    required_data = frozenset({"package_json"})
+
+    def extract(self, old: PackageVersionSnapshot, new: PackageVersionSnapshot) -> dict[str, Any]:
+        return {"no_source_ran": True}
+
+
+class _SourceExtractor(BaseExtractor):
+    name = "needs_source"
+    required_data = frozenset({"package_json", "source"})
+
+    def extract(self, old: PackageVersionSnapshot, new: PackageVersionSnapshot) -> dict[str, Any]:
+        return {"needs_source_ran": True}
+
+
+def test_build_row_requests_source_only_when_an_extractor_declares_it() -> None:
+    """obfuscation처럼 required_data에 "source"를 선언한 extractor가 선택됐을 때만
+    loader가 tarball을 받아야 한다. extractor나 CLI 사용자가 직접 켜지 않는다.
+    """
+    without_source = _RecordingSource()
+    build_row(
+        "sample-pkg",
+        "1.0.0",
+        "1.0.1",
+        label=0,
+        extractors=[_NoSourceExtractor()],
+        old_source=without_source,
+        new_source=without_source,
+    )
+    assert without_source.include_source_calls == [False, False]
+
+    with_source = _RecordingSource()
+    build_row(
+        "sample-pkg",
+        "1.0.0",
+        "1.0.1",
+        label=0,
+        extractors=[_NoSourceExtractor(), _SourceExtractor()],
+        old_source=with_source,
+        new_source=with_source,
+    )
+    assert with_source.include_source_calls == [True, True]
 
 
 @patch("feature_extractor.core.sources.fetch_packument")
