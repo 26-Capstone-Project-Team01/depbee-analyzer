@@ -29,9 +29,19 @@ feature-extractor batch \
   --output data/processed/dataset.csv
 ```
 
-`--extractors`는 개발/디버깅 중 특정 extractor만 실행하고 싶을 때만 사용하는 옵션이며, 생략하면 `feature_extractor.extractors.EXTRACTOR_REGISTRY`에 등록된 모든 extractor가 실행됩니다.
+`--extractors`를 생략하면 `feature_extractor.extractors.EXTRACTOR_REGISTRY`에 등록된 모든 extractor가 실행되고, 결과가 한 CSV에 함께 들어갑니다. 쉼표로 이름을 주면 그 extractor의 feature만 담긴 CSV가 나옵니다.
 
-`obfuscation` extractor는 소스 코드가 필요하므로, 기본 실행 시 `batch`는 pair마다 두 버전의 tarball을 registry에서 내려받습니다. 받은 tarball은 pair 처리가 끝나면 지웁니다. package.json feature만 필요하면 `--extractors package_json`으로 다운로드를 건너뛸 수 있습니다. `batch-local`은 archive에 있는 소스를 읽으므로 tarball을 받지 않습니다.
+```bash
+# 난독화 feature만 (extractor별로 dataset을 따로 둘 때)
+feature-extractor batch-local --archive-root ../npm-malware-package-pairs --output data/processed/malicious_obf.csv --extractors obfuscation
+
+# package.json feature만 (tarball 다운로드 없음)
+feature-extractor batch --pairs-file ../npm-malware-package-pairs/data/pairs.csv --output data/processed/dataset.csv --extractors package_json
+```
+
+extractor별 CSV를 합칠 때는 `package,old_version,new_version`으로 join합니다. extractor마다 실패하는 pair가 다를 수 있어 CSV끼리 행 집합이 같다는 보장은 없습니다.
+
+`obfuscation` extractor는 소스 코드가 필요하므로, 기본 실행 시 `batch`는 pair마다 두 버전의 tarball을 registry에서 내려받습니다. 받은 tarball은 pair 처리가 끝나면 지웁니다. `batch-local`은 archive에 있는 소스를 읽으므로 tarball을 받지 않습니다.
 
 `pairs.csv` 스키마: `package,old_version,new_version,label`
 
