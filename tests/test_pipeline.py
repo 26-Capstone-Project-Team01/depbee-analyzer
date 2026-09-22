@@ -32,7 +32,7 @@ PACKUMENT = {
 
 def test_resolve_extractors_default_returns_all_registered() -> None:
     extractors = resolve_extractors(None)
-    assert {e.name for e in extractors} == {"package_json"}
+    assert {e.name for e in extractors} == {"package_json", "obfuscation"}
 
 
 def test_resolve_extractors_unknown_name_raises_value_error() -> None:
