@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from feature_extractor.core.local_dataset import iter_pair_dirs, run_local_archive_batch
 from feature_extractor.core.pipeline import resolve_extractors
 
@@ -107,3 +109,63 @@ def test_run_local_archive_batch_respects_limit(mock_fetch_packument, tmp_path: 
     with output_csv.open(newline="", encoding="utf-8") as f:
         dataset_rows = list(csv.DictReader(f))
     assert len(dataset_rows) == 2
+
+
+def _read_dict_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+@patch("feature_extractor.core.local_dataset.fetch_packument")
+def test_full_run_after_limited_smoke_test_does_not_keep_its_errors(
+    mock_fetch_packument, tmp_path: Path
+) -> None:
+    """--limit으로 먼저 시험 실행한 뒤 같은 경로로 전체 실행해도 errors가 섞이면 안 된다."""
+    archive_root = tmp_path / "archive"
+    _make_excluded_pair(archive_root, "campaign-a", "pkg-a-bad", "pkg-a-bad")
+    _make_valid_pair(archive_root, "campaign-a", "pkg-b-good", "pkg-b-good")
+    mock_fetch_packument.return_value = {
+        "time": {"1.0.0": "2024-01-01T00:00:00.000Z", "1.0.1": "2024-01-02T00:00:00.000Z"}
+    }
+    output_csv = tmp_path / "dataset.csv"
+    errors_csv = tmp_path / "dataset.errors.csv"
+    extractors = resolve_extractors(["package_json"])
+
+    run_local_archive_batch(archive_root, output_csv, errors_csv, extractors, limit=1)
+    run_local_archive_batch(archive_root, output_csv, errors_csv, extractors)
+
+    assert [r["package"] for r in _read_dict_rows(output_csv)] == ["pkg-b-good"]
+    assert [r["package"] for r in _read_dict_rows(errors_csv)] == ["pkg-a-bad"]
+
+
+def test_missing_archive_root_keeps_previous_outputs(tmp_path: Path) -> None:
+    output_csv = tmp_path / "dataset.csv"
+    errors_csv = tmp_path / "dataset.errors.csv"
+    output_csv.write_text("previous dataset\n", encoding="utf-8")
+    errors_csv.write_text("previous errors\n", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError):
+        run_local_archive_batch(
+            tmp_path / "typo", output_csv, errors_csv, resolve_extractors(["package_json"])
+        )
+
+    assert output_csv.read_text(encoding="utf-8") == "previous dataset\n"
+    assert errors_csv.read_text(encoding="utf-8") == "previous errors\n"
+
+
+def test_archive_root_without_meta_json_keeps_previous_outputs(tmp_path: Path) -> None:
+    """archive의 상위 디렉터리처럼 pair가 하나도 없는 경로를 넣으면 이전 결과를 지우지 않는다."""
+    not_an_archive = tmp_path / "capstone"
+    (not_an_archive / "feature-extractor" / "src").mkdir(parents=True)
+    output_csv = tmp_path / "dataset.csv"
+    errors_csv = tmp_path / "dataset.errors.csv"
+    output_csv.write_text("previous dataset\n", encoding="utf-8")
+    errors_csv.write_text("previous errors\n", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError):
+        run_local_archive_batch(
+            not_an_archive, output_csv, errors_csv, resolve_extractors(["package_json"])
+        )
+
+    assert output_csv.read_text(encoding="utf-8") == "previous dataset\n"
+    assert errors_csv.read_text(encoding="utf-8") == "previous errors\n"
