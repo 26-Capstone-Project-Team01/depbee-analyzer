@@ -199,6 +199,22 @@ def test_build_snapshot_with_source_corrupt_tarball_raises_loader_error(mock_get
 
 
 @patch("feature_extractor.core.loader.requests.get")
+def test_build_snapshot_with_source_os_error_during_extraction_raises_loader_error(
+    mock_get: Mock, tmp_path: Path
+) -> None:
+    """이 OS에서 만들 수 없는 경로(Windows의 ':' 등)는 batch 전체를 멈추지 않고 pair 오류가 되어야 한다.
+
+    실제로 benign 패키지의 dist/~demos/:id/index.html 때문에 Windows에서 OSError가 나
+    batch 한 조각(500쌍)이 통째로 중단된 적이 있다.
+    """
+    mock_get.return_value = _mock_tarball_response(_tarball_bytes(_SAMPLE_TARBALL))
+
+    with patch("feature_extractor.core.loader.tarfile.TarFile.extractall", side_effect=OSError(123, "bad name")):
+        with pytest.raises(LoaderError):
+            build_snapshot(TARBALL_PACKUMENT, "sample-pkg", "1.0.0", include_source=True, source_parent_dir=tmp_path)
+
+
+@patch("feature_extractor.core.loader.requests.get")
 def test_build_snapshot_without_source_does_not_download_tarball(mock_get: Mock) -> None:
     snapshot = build_snapshot(TARBALL_PACKUMENT, "sample-pkg", "1.0.0")
 
