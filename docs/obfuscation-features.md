@@ -154,6 +154,30 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 - TypeScript enum을 컴파일한 작은 파일(`E[E["A"] = 0] = "A"` 형태)에서 `bracketAccessRatio`가 오탐합니다. 5건입니다.
 - 실제 minify 파일에서 `shortIdentRatio`·`meanIdentLength`가 오탐합니다. 3건입니다.
 
+### 5. 어려운 benign과 번들 신호 (2026-09-23)
+
+무작위 benign에는 설치 스크립트를 추가한 정상 업데이트가 없고, 번들이 새로 생기는 경우도 드뭅니다. 그래서 registry에서 이런 "어려운" 정상 업데이트 299쌍을 따로 골랐습니다(`obf-eval/sample_hard_benign.py`와 같은 방식).
+
+- 설치 스크립트 추가 150쌍: 새 버전에 이전에 없던 `preinstall`·`install`·`postinstall`이 생긴 연속 버전입니다.
+- 크기 급증 149쌍: `unpackedSize`가 3배 이상, 1MB 이상으로 늘어난 연속 버전입니다.
+
+고르는 과정에서 1쌍(`executable-stories-playwright` 8.4.2 → 3.1.1)이 실제 악성으로 확인돼 뺐습니다. OSV에 `MAL-2026-5256`으로 등록돼 있고, Windows Defender가 `Trojan:NPM/MiniShaiHrd.ZA!MTB`로 탐지했습니다. benign 2,300쌍의 old/new 버전 전체를 OSV와 대조했을 때 악성 등록 버전은 이 1건뿐이었습니다. registry에서 benign을 뽑을 때는 OSV 대조를 기본 단계로 두는 것이 좋습니다.
+
+검증 방식은 campaign 하나를 통째로 빼고 학습하고, 페이로드 중복을 제거하는 것입니다. 임계값은 무작위 benign 오탐률 1%로 정하고, 어려운 benign 오탐률은 종류별로 따로 쟀습니다. 크기 feature(SIZE)는 변경 파일 수와 바이트 수, 번들 feature(BUNDLE)는 줄 길이·엔트로피·긴 문자열·base64 길이입니다.
+
+| 학습에 쓴 benign | feature | 가중 탐지율 | canisterworm | shai-hulud-original | 설치 스크립트 추가 오탐 | 크기 급증 오탐 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 무작위만 | package_json + 난독화 | 0.977 | 0.94 | 0.95 | **98.9%** | 12.6% |
+| 무작위 + 어려운 | package_json + 난독화 | 0.872 | 0.00 | 0.84 | 10.8% | 7.6% |
+| 무작위 + 어려운 | + SIZE | 0.912 | 0.04 | 1.00 | 7.6% | 5.9% |
+| 무작위 + 어려운 | + BUNDLE | 0.905 | 0.00 | 0.95 | 7.6% | 9.4% |
+| 무작위 + 어려운 | + BUNDLE + SIZE | 0.916 | 0.00 | 1.00 | 6.0% | 7.0% |
+
+- **어려운 benign은 학습에 꼭 넣어야 합니다.** 무작위 benign만으로 학습하면 설치 스크립트를 추가한 정상 업데이트의 98.9%를 악성으로 판정합니다. 모델이 "설치 스크립트 추가 = 악성"을 배우기 때문입니다.
+- **넣으면 canisterworm을 못 잡습니다(0.94 → 0.00).** canisterworm은 난독화 없는 평범한 코드에 설치 스크립트를 추가합니다. 설치 스크립트 추가가 정상 업데이트에도 있는 일이 되면, 지금 feature로는 둘을 구분할 근거가 없습니다. 팀 설계의 행동 feature(네트워크, 프로세스 실행, 환경변수 접근과 그 설치 문맥)가 필요합니다.
+- **번들 신호보다 크기·변경량 feature가 낫습니다.** 크기 feature를 더하면 shai-hulud-original 탐지가 0.84에서 1.00으로 오르고 어려운 benign 오탐도 줄었습니다. 줄 길이 같은 번들 지표는 크기 feature 위에 얹어도 이득이 거의 없었습니다.
+- **결론:** 줄 길이 번들 지표는 넣지 않습니다. 크기·변경량 feature는 난독화가 아니라 "무엇이 얼마나 바뀌었나"에 대한 것이므로, 난독화 extractor가 아니라 팀 설계 A-2(변경점 중심) 성격의 별도 extractor로 두는 것을 제안합니다.
+
 ## 구현된 feature
 
 지표 8개를 파일별로 계산하고, 팀 설계(방안 1+2)에 맞춰 세 가지 값으로 냅니다. 컬럼 이름은 `obf` + 지표 이름 + 접미어입니다(예: `obfHexIdentRatioChangedCode`).
@@ -189,10 +213,20 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 - 줄 길이, 엔트로피, 문자열 길이, base64/hex 연속 길이: 난독화가 아니라 minify·번들 신호입니다.
 - `eval`/`Function`·디코딩 호출 수: 정상 번들에 흔해 단독 신호가 되지 못합니다.
 
+## 생성한 dataset
+
+`data/processed/`(커밋 대상 아님)에 있고, 각 파일을 만든 커밋·입력·행 수는 `data/processed/MANIFEST.json`에 기록했습니다.
+
+- `malicious_features.csv`: 악성 728행(errors 48행은 archive 상태 문제 47건과 `package.json` 후보가 둘인 1건).
+- `benign_features.csv`: 무작위 benign 2,000쌍.
+- `hard_benign_features.csv`: 어려운 benign 299쌍(5절).
+- `malicious_pair_groups.csv`: 악성 pair별 campaign과 페이로드 해시. 학습할 때 중복 제거와 campaign 단위 분할에 씁니다. 고유 페이로드는 가장 큰 변경 파일 기준 46개, 변경 파일 전체 기준 65개입니다.
+- `excluded_benign_pairs.csv`, `benign_osv_screening.csv`: benign에서 뺀 pair와 OSV 대조 결과.
+
 ## 남은 과제
 
-1. **번들 신호.** 줄 길이 등을 난독화와 구분되는 별도 feature로 둘지 정합니다. shai-hulud-original처럼 난독화 없이 번들만 추가하는 공격에 필요할 수 있습니다.
-2. **남은 오탐.** 실제 minify 파일에서 `ShortIdentRatio`·`MeanIdentLength`가 오탐합니다(3건). 규칙이 아니라 모델 입력으로 쓰면 다른 지표와 함께 판단되지만, 정상 minify 표본을 학습 데이터에 충분히 넣어야 합니다.
-3. **benign 표본 보강.** 설치 스크립트나 번들을 추가하는 정상 업데이트를 포함해야 오탐률을 제대로 잴 수 있습니다.
-4. **학습·평가 방식.** 페이로드 해시로 중복을 제거하고 campaign 단위로 나눠 평가합니다(3절의 지름길 학습 문제). 무작위 분할 수치는 보고하지 않습니다.
-5. **전체 dataset 생성.** `batch-local`(악성 729쌍)과 `batch`(benign 2,000쌍)를 전체로 돌려 결과를 만듭니다. benign은 pair마다 tarball 두 개를 받으므로 시간이 걸립니다.
+1. **행동 feature.** canisterworm처럼 난독화 없이 설치 스크립트만 추가하는 공격은 package.json·난독화 feature로 정상과 구분되지 않습니다(5절). 네트워크, 프로세스 실행, 환경변수 접근과 그 설치 문맥 feature가 필요합니다.
+2. **변경량 extractor.** 변경 파일 수·바이트 같은 크기 feature를 별도 extractor로 둘지 팀에서 정합니다(5절).
+3. **학습.** 어려운 benign을 학습 데이터에 넣고, `malicious_pair_groups.csv`로 페이로드 중복을 제거하며, campaign 단위로 나눠 평가합니다. 무작위 분할 수치는 보고하지 않습니다.
+4. **남은 오탐.** 실제 minify 파일에서 `ShortIdentRatio`·`MeanIdentLength`가 오탐합니다(3건). 정상 minify 표본을 학습 데이터에 충분히 넣어야 합니다.
+5. **benign 수집 시 OSV 대조.** registry에서 benign을 뽑을 때 악성 등록 버전을 걸러내는 단계를 기본으로 둡니다.

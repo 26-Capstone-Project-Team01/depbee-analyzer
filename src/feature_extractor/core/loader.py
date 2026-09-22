@@ -112,7 +112,9 @@ def _download_and_extract_tarball(
         with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as tar:
             # 외부(신뢰할 수 없는) tarball이므로 path traversal 방지를 위해 "data" filter로 추출한다.
             tar.extractall(extract_dir, filter="data")
-    except tarfile.TarError as exc:
+    except (tarfile.TarError, OSError) as exc:
+        # OSError: 이 OS에서 만들 수 없는 경로(예: Windows에서 ':'가 든 파일 이름), 백신 차단 등.
+        # 문제 파일만 건너뛰면 소스 트리가 조용히 불완전해지므로, pair 단위 오류로 기록한다.
         raise LoaderError(f"failed to extract tarball for {package!r}@{version!r}: {exc}") from exc
 
     return _locate_package_root(extract_dir, package, version)

@@ -16,8 +16,8 @@ def resolve_extractors(names: Iterable[str] | None) -> list[BaseExtractor]:
     """--extractors 값으로부터 실행할 extractor 인스턴스 목록을 만든다.
 
     names가 없으면(None) 등록된 전체 extractor를 기본으로 실행한다.
-    특정 이름을 고르는 것은 개발/디버깅 용도이며, 최종 dataset 생성 시에는
-    항상 전체 실행(names=None)을 사용한다.
+    특정 이름을 고르면 그 extractor의 feature만 담긴 dataset이 나온다. extractor별로
+    CSV를 따로 두거나, 소스 다운로드가 필요 없는 extractor만 돌릴 때 쓴다.
     """
     selected_names = list(names) if names else list(EXTRACTOR_REGISTRY)
     try:
