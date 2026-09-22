@@ -49,6 +49,25 @@ def test_local_archive_source_reads_package_json_and_registry_time(tmp_path: Pat
     assert snapshot.package_json["scripts"]["postinstall"] == "node x.js"
     assert snapshot.published_at.year == 2024
     assert snapshot.published_at.day == 2
+    assert snapshot.source_dir is None
+
+
+def test_local_archive_source_with_include_source_points_at_the_package_root(tmp_path: Path) -> None:
+    """source_dir은 registry tarball 경로와 마찬가지로 package.json이 있는 디렉터리여야 한다."""
+    raw_root = tmp_path / "malicious_raw"
+    package_dir = raw_root / "tmp" / "tmpabc123" / "sample-pkg" / "package"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        '{"name": "sample-pkg", "version": "1.0.1"}', encoding="utf-8"
+    )
+    (package_dir / "index.js").write_text("module.exports = 1;", encoding="utf-8")
+
+    source = LocalArchiveSnapshotSource(raw_root, PACKUMENT)
+    snapshot = source.get_snapshot("sample-pkg", "1.0.1", include_source=True)
+
+    assert snapshot.source_dir == package_dir
+    assert (snapshot.source_dir / "package.json").is_file()
+    assert (snapshot.source_dir / "index.js").is_file()
 
 
 def test_local_archive_source_missing_package_json_raises_loader_error(tmp_path: Path) -> None:

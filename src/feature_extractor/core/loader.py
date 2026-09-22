@@ -106,4 +106,26 @@ def _download_and_extract_tarball(package: str, version: str, package_json: dict
     except tarfile.TarError as exc:
         raise LoaderError(f"failed to extract tarball for {package!r}@{version!r}: {exc}") from exc
 
-    return extract_dir
+    return _locate_package_root(extract_dir, package, version)
+
+
+def _locate_package_root(extract_dir: Path, package: str, version: str) -> Path:
+    """압축 해제 결과에서 package.json이 있는 패키지 루트를 찾는다.
+
+    npm tarball은 관례상 모든 파일을 하나의 최상위 디렉터리("package/") 아래에 담지만,
+    그 이름이 항상 "package"인 것은 아니다. PackageVersionSnapshot.source_dir의 의미를
+    SnapshotSource 종류와 무관하게 "패키지 루트"로 맞추기 위해, 여기서 한 단계 벗겨낸다.
+    찾지 못하면 임의로 extract_dir을 반환하지 않고 LoaderError를 낸다 (source 기반
+    extractor가 잘못된 루트에서 빈 결과를 내놓는 것을 막는다).
+    """
+    if (extract_dir / "package.json").is_file():
+        return extract_dir
+
+    candidates = [child for child in sorted(extract_dir.iterdir()) if (child / "package.json").is_file()]
+    if len(candidates) == 1:
+        return candidates[0]
+
+    raise LoaderError(
+        f"could not locate a unique package root containing package.json in the tarball "
+        f"for {package!r}@{version!r} (candidates: {[str(c) for c in candidates]})"
+    )
