@@ -50,31 +50,43 @@ def build_row(
             f"old_version and new_version are identical ({old_version!r}) for package {package!r}"
         )
 
+    # 여기서 직접 만든 source만 여기서 닫는다. 호출부가 넘긴 source의 수명은 호출부가 관리한다.
+    owned_sources: list[SnapshotSource] = []
     if old_source is None and new_source is None:
         shared_registry_source = RegistrySnapshotSource()
+        owned_sources.append(shared_registry_source)
         old_source = shared_registry_source
         new_source = shared_registry_source
     else:
-        old_source = old_source or RegistrySnapshotSource()
-        new_source = new_source or RegistrySnapshotSource()
+        if old_source is None:
+            old_source = RegistrySnapshotSource()
+            owned_sources.append(old_source)
+        if new_source is None:
+            new_source = RegistrySnapshotSource()
+            owned_sources.append(new_source)
 
     # 선택된 extractor들이 필요로 하는 데이터의 합집합만큼만 loader에게 요청한다.
     # (예: package_json extractor만 선택되면 tarball을 내려받지 않는다.)
     needs_source = any("source" in extractor.required_data for extractor in extractors)
 
-    old_snapshot = old_source.get_snapshot(package, old_version, include_source=needs_source)
-    new_snapshot = new_source.get_snapshot(package, new_version, include_source=needs_source)
+    try:
+        old_snapshot = old_source.get_snapshot(package, old_version, include_source=needs_source)
+        new_snapshot = new_source.get_snapshot(package, new_version, include_source=needs_source)
 
-    features: dict[str, object] = {}
-    for extractor in extractors:
-        result = extractor.extract(old_snapshot, new_snapshot)
-        overlap = features.keys() & result.keys()
-        if overlap:
-            raise FeatureExtractorError(
-                f"extractor {extractor.name!r} produced feature name(s) already set by "
-                f"another extractor: {sorted(overlap)}"
-            )
-        features.update(result)
+        features: dict[str, object] = {}
+        for extractor in extractors:
+            result = extractor.extract(old_snapshot, new_snapshot)
+            overlap = features.keys() & result.keys()
+            if overlap:
+                raise FeatureExtractorError(
+                    f"extractor {extractor.name!r} produced feature name(s) already set by "
+                    f"another extractor: {sorted(overlap)}"
+                )
+            features.update(result)
+    finally:
+        # 받아서 풀어 둔 tarball은 extractor 실행이 끝나면 필요 없다.
+        for source in owned_sources:
+            source.close()
 
     return FeatureRow(
         package=package,
