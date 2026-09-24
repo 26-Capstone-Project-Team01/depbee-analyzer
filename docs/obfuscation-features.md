@@ -156,7 +156,7 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 
 ### 5. 어려운 benign과 번들 신호 (2026-09-23)
 
-무작위 benign에는 설치 스크립트를 추가한 정상 업데이트가 없고, 번들이 새로 생기는 경우도 드뭅니다. 그래서 registry에서 이런 "어려운" 정상 업데이트 299쌍을 따로 골랐습니다. 샘플링·OSV 대조·그룹 파일 스크립트와 결과 CSV는 `npm-malware-package-pairs/derived/obfuscation_features/`에 있습니다.
+무작위 benign에는 설치 스크립트를 추가한 정상 업데이트가 없고, 번들이 새로 생기는 경우도 드뭅니다. 그래서 registry에서 이런 "어려운" 정상 업데이트 299쌍을 따로 골랐습니다. 샘플링·OSV 대조·그룹 파일 스크립트와 결과 CSV는 `npm-malware-package-pairs/derived/pairs/`에 있습니다.
 
 - 설치 스크립트 추가 150쌍: 새 버전에 이전에 없던 `preinstall`·`install`·`postinstall`이 생긴 연속 버전입니다.
 - 크기 급증 149쌍: `unpackedSize`가 3배 이상, 1MB 이상으로 늘어난 연속 버전입니다.
@@ -221,8 +221,8 @@ package.json feature까지 함께 담은 합본은 로컬 `data/processed/`(커�
 - `malicious_features.csv`: 악성 728행(errors 48행은 archive 상태 문제 47건과 `package.json` 후보가 둘인 1건).
 - `benign_features.csv`: 무작위 benign 1,999행(errors 1행은 Windows에서 만들 수 없는 파일 이름이 든 tarball).
 - `hard_benign_features.csv`: 어려운 benign 299쌍(5절).
-- `malicious_pair_groups.csv`: 악성 pair별 campaign과 페이로드 해시. 학습할 때 중복 제거와 campaign 단위 분할에 씁니다. 고유 페이로드는 가장 큰 변경 파일 기준 46개, 변경 파일 전체 기준 65개입니다.
-- `excluded_benign_pairs.csv`, `benign_osv_screening.csv`: benign에서 뺀 pair와 OSV 대조 결과.
+- `derived/pairs/malicious_pair_groups.csv`: 악성 pair별 campaign과 페이로드 해시. 학습할 때 중복 제거와 campaign 단위 분할에 씁니다. 고유 페이로드는 가장 큰 변경 파일 기준 46개, 변경 파일 전체 기준 65개입니다.
+- `derived/pairs/excluded_benign_pairs.csv`, `derived/pairs/benign_osv_screening.csv`: benign에서 뺀 pair와 OSV 대조 결과.
 
 ## 남은 과제
 
