@@ -13,7 +13,7 @@ from feature_extractor.core.sources import LocalArchiveSnapshotSource
 from feature_extractor.extractors.base import BaseExtractor
 
 #: npm-malware-package-pairs는 전부 실제 악성 업데이트 사례를 다루는 저장소이므로
-#: (meta.json 776개 전수 조사로 확인: status="ok"인 729개 전부가 정상->악성 구조,
+#: (meta.json 897개 전수 조사로 확인: status="ok"인 850개 전부가 정상->악성 구조,
 #: 나머지 47개는 status가 http_error_404/no_clean_baseline_found로 애초에 제외됨) label은 고정값.
 LOCAL_ARCHIVE_LABEL = 1
 
