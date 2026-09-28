@@ -216,12 +216,12 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 ## 생성한 dataset
 
 팀이 쓰는 결과는 `npm-malware-package-pairs/derived/obfuscation_features/`에 있습니다. `package_json_features/`와 같은 형식으로 난독화 feature만 담았고, 파일 설명은 그 디렉터리의 README에 있습니다.
-package.json feature까지 함께 담은 합본은 로컬 `data/processed/`(커밋 대상 아님)에 있고, 각 파일을 만든 커밋·입력·행 수는 `data/processed/MANIFEST.json`에 기록했습니다.
+package.json feature까지 함께 담은 학습용 합본은 `derived/combined_features/`에 있습니다. 이전에 만든 로컬 합본은 `data/processed/`(커밋 대상 아님)에 있고, 각 파일을 만든 커밋·입력·행 수는 `data/processed/MANIFEST.json`에 기록했습니다.
 
-- `malicious_features.csv`: 악성 728행(errors 48행은 archive 상태 문제 47건과 `package.json` 후보가 둘인 1건).
-- `benign_features.csv`: 무작위 benign 1,999행(errors 1행은 Windows에서 만들 수 없는 파일 이름이 든 tarball).
-- `hard_benign_features.csv`: 어려운 benign 299쌍(5절).
-- `derived/pairs/malicious_pair_groups.csv`: 악성 pair별 campaign과 페이로드 해시. 학습할 때 중복 제거와 campaign 단위 분할에 씁니다. 고유 페이로드는 가장 큰 변경 파일 기준 46개, 변경 파일 전체 기준 65개입니다.
+- `malicious_combined_features.csv`: 악성 849행(errors 48행은 archive 상태 문제 47건과 `package.json` 후보가 둘인 1건).
+- `benign_combined_features.csv`: 무작위 benign 1,999행(errors 1행은 Windows에서 만들 수 없는 파일 이름이 든 tarball).
+- `hard_benign_combined_features.csv`: 어려운 benign 299쌍(5절).
+- `derived/pairs/malicious_pair_groups.csv`: 악성 pair별 campaign과 페이로드 해시(849행). 학습할 때 중복 제거와 campaign 단위 분할에 씁니다. 고유 페이로드는 (campaign, 해시) 기준으로 가장 큰 변경 파일 132개, 변경 파일 전체 153개입니다. 추가·수정된 JS가 없는 32쌍은 해시가 빈 값이고, 위 수에는 campaign마다 빈 값 하나로 들어 있습니다.
 - `derived/pairs/excluded_benign_pairs.csv`, `derived/pairs/benign_osv_screening.csv`: benign에서 뺀 pair와 OSV 대조 결과.
 
 ## 남은 과제
