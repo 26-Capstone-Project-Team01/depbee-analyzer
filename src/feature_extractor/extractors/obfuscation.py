@@ -11,6 +11,8 @@
     - ``...ChangedCode``: 이번 업데이트에서 추가·수정된 파일만
 - 값을 계산할 파일이 없으면 0으로 채우지 않고 None으로 둔다(CSV에서는 빈 칸,
   LightGBM에서는 결측). ``obfChangedFileCount``가 0이면 ``...ChangedCode``가 모두 None이다.
+- 작을수록 난독화인 지표는 파일에서 값을 계산할 수 없으면(식별자가 없거나 빈 파일) None을 내고
+  집계에서 뺀다. 0으로 두면 최솟값 집계에서 그 파일이 가짜 난독화 신호가 된다.
 """
 
 from __future__ import annotations
@@ -63,7 +65,9 @@ class _Metric:
     name: str
     #: +1이면 클수록, -1이면 작을수록 난독화에 가깝다. 패키지 단위 집계 방향을 정한다.
     direction: int
-    compute: Callable[["_FileStats"], float]
+    #: 계산할 대상이 없으면 None. 클수록 난독화인 지표는 None 대신 0.0을 낸다(최대값 집계에서
+    #: 0은 다른 파일의 값을 가리지 않고, 이전 버전에 대상이 없던 경우의 Change 신호를 살린다).
+    compute: Callable[["_FileStats"], float | None]
 
 
 @dataclass(frozen=True)
@@ -118,16 +122,20 @@ def _short_ident_ratio(s: _FileStats) -> float:
     return _ratio(sum(1 for t in s.identifiers if len(t) <= 2), len(s.identifiers))
 
 
-def _mean_ident_length(s: _FileStats) -> float:
-    return _ratio(sum(len(t) for t in s.identifiers), len(s.identifiers))
+def _mean_ident_length(s: _FileStats) -> float | None:
+    if not s.identifiers:
+        return None
+    return sum(len(t) for t in s.identifiers) / len(s.identifiers)
 
 
 def _packer_signature(s: _FileStats) -> float:
     return 1.0 if _PACKER.search(s.text) else 0.0
 
 
-def _whitespace_ratio(s: _FileStats) -> float:
-    return _ratio(sum(1 for c in s.text if c.isspace()), len(s.text))
+def _whitespace_ratio(s: _FileStats) -> float | None:
+    if not s.text:
+        return None
+    return sum(1 for c in s.text if c.isspace()) / len(s.text)
 
 
 #: dataset 컬럼 이름은 obf + 지표 이름 + New/Change/ChangedCode 로 만든다.
@@ -143,26 +151,33 @@ METRICS: tuple[_Metric, ...] = (
 )
 
 
-def file_metrics(text: str) -> dict[str, float]:
+def file_metrics(text: str) -> dict[str, float | None]:
     """파일 하나의 난독화 지표."""
     stats = _file_stats(text)
     return {metric.name: metric.compute(stats) for metric in METRICS}
 
 
-def aggregate(files: list[SourceFile], metrics_by_path: dict[str, dict[str, float]]) -> dict[str, float] | None:
+def aggregate(
+    files: list[SourceFile], metrics_by_path: dict[str, dict[str, float | None]]
+) -> dict[str, float | None] | None:
     """여러 파일의 지표를 패키지 단위 하나로 모은다. 파일이 없으면 None.
 
     파일 하나만 난독화된 경우에도 신호가 희석되지 않도록 난독화 쪽 극값을 쓴다
-    (방향 +1은 최대값, -1은 1KB 이상 파일의 최소값).
+    (방향 +1은 최대값, -1은 1KB 이상 파일의 최소값). 값이 None인 파일은 빼고,
+    모든 파일이 None이면 그 지표는 None이다.
     """
     if not files:
         return None
-    large = [f for f in files if f.size_bytes >= MIN_BYTES_FOR_LOWER_IS_OBFUSCATED] or files
-    result = {}
+    result: dict[str, float | None] = {}
     for metric in METRICS:
-        pool = files if metric.direction > 0 else large
-        values = [metrics_by_path[f.relative_path][metric.name] for f in pool]
-        result[metric.name] = max(values) if metric.direction > 0 else min(values)
+        valued = [f for f in files if metrics_by_path[f.relative_path][metric.name] is not None]
+        if metric.direction < 0:
+            valued = [f for f in valued if f.size_bytes >= MIN_BYTES_FOR_LOWER_IS_OBFUSCATED] or valued
+        values = [metrics_by_path[f.relative_path][metric.name] for f in valued]
+        if not values:
+            result[metric.name] = None
+        else:
+            result[metric.name] = max(values) if metric.direction > 0 else min(values)
     return result
 
 

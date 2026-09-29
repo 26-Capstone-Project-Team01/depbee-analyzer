@@ -181,3 +181,56 @@ def test_aggregate_uses_the_most_obfuscated_file_for_higher_is_obfuscated_metric
 
 def test_aggregate_of_no_files_is_none() -> None:
     assert aggregate([], {}) is None
+
+
+def test_lower_is_obfuscated_metrics_are_none_when_there_is_nothing_to_measure() -> None:
+    """식별자가 없는 파일의 평균 식별자 길이는 0이 아니라 계산할 수 없는 값이다."""
+    numbers_only = file_metrics("[" + ",".join(str(i) for i in range(50)) + "]")
+    empty = file_metrics("")
+
+    assert numbers_only["MeanIdentLength"] is None
+    assert numbers_only["WhitespaceRatio"] == 0.0
+    assert empty["MeanIdentLength"] is None
+    assert empty["WhitespaceRatio"] is None
+    # 클수록 난독화인 지표는 그대로 0.0이다.
+    assert empty["HexIdentRatio"] == 0.0
+    assert empty["HexNumberRatio"] == 0.0
+
+
+def test_file_without_identifiers_does_not_drive_mean_ident_length_to_zero() -> None:
+    data = _source_file("data.js", "[" + ",".join(str(i) for i in range(400)) + "]")
+    readable = _source_file("index.js", "function add(first, second) {\n    return first + second;\n}\n" * 40)
+    files = [data, readable]
+    assert data.size_bytes >= 1024
+
+    result = aggregate(files, {f.relative_path: file_metrics(f.text) for f in files})
+
+    assert result is not None
+    assert result["MeanIdentLength"] == file_metrics(readable.text)["MeanIdentLength"]
+    assert result["MeanIdentLength"] > 3
+
+
+def test_small_files_are_used_when_the_only_large_file_has_no_value() -> None:
+    data = _source_file("data.js", "[" + ",".join(str(i) for i in range(400)) + "]")
+    small = _source_file("index.js", "var x = require('./data');\nmodule.exports = x;\n")
+    files = [data, small]
+
+    result = aggregate(files, {f.relative_path: file_metrics(f.text) for f in files})
+
+    assert result is not None
+    assert result["MeanIdentLength"] == file_metrics(small.text)["MeanIdentLength"]
+
+
+def test_package_where_no_file_has_identifiers_has_missing_mean_ident_length(
+    extractor: ObfuscationExtractor, tmp_path: Path
+) -> None:
+    old = _write(tmp_path / "old", {"index.js": "module.exports = 1;\n"})
+    new = _write(tmp_path / "new", {"index.js": "[1, 2, 3]\n"})
+
+    features = extractor.extract(_snapshot("1.0.0", old), _snapshot("1.0.1", new))
+
+    assert features["obfMeanIdentLengthNew"] is None
+    assert features["obfMeanIdentLengthChange"] is None
+    assert features["obfMeanIdentLengthChangedCode"] is None
+    assert features["obfWhitespaceRatioNew"] is not None
+    assert features["obfHexIdentRatioNew"] == 0.0
