@@ -180,7 +180,7 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 
 ## 구현된 feature
 
-지표 8개를 파일별로 계산하고, 팀 설계(방안 1+2)에 맞춰 세 가지 값으로 냅니다. 컬럼 이름은 `obf` + 지표 이름 + 접미어입니다(예: `obfHexIdentRatioChangedCode`).
+지표 7개를 파일별로 계산하고, 팀 설계(방안 1+2)에 맞춰 세 가지 값으로 냅니다. 컬럼 이름은 `obf` + 지표 이름 + 접미어입니다(예: `obfHexIdentRatioChangedCode`).
 
 | 지표 | 의미 | 난독화 쪽 |
 | --- | --- | --- |
@@ -190,7 +190,6 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 | `EscapeDensity` | `\xNN`, `\uNNNN` 이스케이프가 차지하는 문자 비율 | 클수록 |
 | `ShortIdentRatio` | 길이 2 이하 식별자 비율 | 클수록 |
 | `MeanIdentLength` | 식별자 평균 길이 | 작을수록 |
-| `PackerSignature` | `eval(function(p,a,c,k,e,d)` packer 흔적 (0/1) | 1 |
 | `WhitespaceRatio` | 공백 문자 비율 | 작을수록 |
 
 | 접미어 | 계산 대상 | 팀 설계상 위치 |
@@ -206,11 +205,12 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 - **값을 정의할 수 없는 파일:** 작을수록 난독화인 `MeanIdentLength`(식별자가 없는 파일)와 `WhitespaceRatio`(빈 파일)는 그 파일에서 0.0이 아니라 None을 내고 최소값 집계에서 뺍니다. 0.0은 이 지표에서 "가장 난독화됨"이라, 주석만 있는 파일·`export {};`·따옴표 키 데이터 파일·0바이트 파일 하나가 패키지 값을 0으로 만들던 문제를 막기 위해서입니다. 정의되는 파일이 하나도 없으면 그 지표는 None입니다. 클수록 난독화인 나머지 지표는 0.0이 "난독화 흔적 없음"이고 최대값 집계에 영향을 주지 않으므로 그대로 둡니다.
 - **대상 파일:** `core/source_files.collect_source_files()` 기준입니다(`.js`/`.mjs`/`.cjs`, `node_modules/` 제외).
 - **구현 방식:** Python 정규식·문자 통계로 계산하며, JS 파서나 판별 라이브러리를 쓰지 않습니다(4절).
-- **평가 대비 변경:** TypeScript enum 컴파일 코드(`})(E || (E = {}))`로 끝나는 형태)의 멤버 정의를 대괄호 접근에서 뺐습니다. 평가 코퍼스에서 정상 오탐이 772개 중 8건에서 3건으로 줄었고, 도구별 탐지율은 그대로였습니다. 나머지 7개 지표는 평가 때 프로토타입과 같은 값을 냅니다.
+- **평가 대비 변경:** TypeScript enum 컴파일 코드(`})(E || (E = {}))`로 끝나는 형태)의 멤버 정의를 대괄호 접근에서 뺐습니다. 평가 코퍼스에서 정상 오탐이 772개 중 8건에서 3건으로 줄었고, 도구별 탐지율은 그대로였습니다. 나머지 6개 지표는 평가 때 프로토타입과 같은 값을 내되, 식별자가 없거나 빈 파일의 `MeanIdentLength`·`WhitespaceRatio`는 위의 "값을 정의할 수 없는 파일" 규칙을 따릅니다.
 
 제외한 후보와 이유:
 
 - `stringArraySignature`: 최신 javascript-obfuscator 출력에서 발화하지 않고, 긴 문자열 배열 조건이 정상 minify 코드에서 켜집니다.
+- `PackerSignature`(`eval(function(p,a,c,k,e,d)` packer 흔적, 0/1): 처음에는 지표 8개 중 하나로 넣었다가 뺐습니다(2026-09-29). 합성 벤치마크(1절)에서는 packer를 100% 잡았지만, 실제 dataset(악성 849, 무작위 benign 1,999, 어려운 benign 299쌍)의 New·Change·ChangedCode 값이 전부 0이었고, 악성 archive의 `malicious_raw`·`normal_raw` JS 60,421개를 extractor 정규식과 느슨한 `function(p,a,c,k,e,` 패턴으로 모두 찾아도 0건이었습니다. 값이 상수라 학습에 쓸 정보가 없고, 결측 여부도 다른 지표와 같아 따로 담는 정보가 없었습니다. archive의 `eval(function(` 47건은 packer가 아니라 문자코드 배열을 푸는 ROT-n 디코더(`function(s,n)`)였습니다. 1절에서 packer는 `shortIdentRatio`로도 100% 잡혔습니다. packer 표본이 데이터에 들어오면 이 커밋 이전의 `_PACKER` 정규식과 `_packer_signature`를 `METRICS`에 되돌리고 전체를 다시 추출하면 됩니다.
 - 줄 길이, 엔트로피, 문자열 길이, base64/hex 연속 길이: 난독화가 아니라 minify·번들 신호입니다.
 - `eval`/`Function`·디코딩 호출 수: 정상 번들에 흔해 단독 신호가 되지 못합니다.
 

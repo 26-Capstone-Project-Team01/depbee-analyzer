@@ -15,6 +15,8 @@
   (식별자가 없는 파일, 빈 파일) 0.0이 아니라 None을 내고 집계에서 뺀다. 0.0은 이 지표에서
   "가장 난독화됨"이라는 극단값이라, 주석만 있는 파일 하나가 패키지 값을 정해 버리기 때문이다.
   클수록 난독화인 지표는 0.0이 "난독화 흔적 없음"이라 최대값 집계에 해가 없으므로 그대로 둔다.
+- packer(``eval(function(p,a,c,k,e,d)``) 흔적 지표는 뺐다. 실제 dataset 3,147쌍과 archive JS
+  60,421개에서 한 번도 나오지 않아 정보가 없었다. 근거와 복원 방법은 설계 문서에 있다.
 """
 
 from __future__ import annotations
@@ -41,7 +43,6 @@ _HEX_IDENT = re.compile(r"_0x[0-9a-fA-F]{3,}")
 _NUMBER = re.compile(r"\b(?:0x[0-9a-fA-F]+|\d+)\b")
 _HEX_ESCAPE = re.compile(r"\\x[0-9a-fA-F]{2}")
 _UNICODE_ESCAPE = re.compile(r"\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\}")
-_PACKER = re.compile(r"eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*[dr]\s*\)")
 # 멤버 접근 중 키가 문자열 리터럴이거나 _0x 계열 함수 호출인 것: obj['x'], obj['\x78'], obj[_0xab(0x1)]
 _BRACKET_ACCESS = re.compile(r"[\w$)\]]\s*\[\s*(?:'|\"|_0x[0-9a-fA-F]+\s*\()")
 _DOT_ACCESS = re.compile(r"\.[A-Za-z_$]")
@@ -129,10 +130,6 @@ def _mean_ident_length(s: _FileStats) -> float | None:
     return sum(len(t) for t in s.identifiers) / len(s.identifiers)
 
 
-def _packer_signature(s: _FileStats) -> float:
-    return 1.0 if _PACKER.search(s.text) else 0.0
-
-
 def _whitespace_ratio(s: _FileStats) -> float | None:
     if not s.text:
         return None
@@ -147,7 +144,6 @@ METRICS: tuple[_Metric, ...] = (
     _Metric("EscapeDensity", +1, _escape_density),
     _Metric("ShortIdentRatio", +1, _short_ident_ratio),
     _Metric("MeanIdentLength", -1, _mean_ident_length),
-    _Metric("PackerSignature", +1, _packer_signature),
     _Metric("WhitespaceRatio", -1, _whitespace_ratio),
 )
 
