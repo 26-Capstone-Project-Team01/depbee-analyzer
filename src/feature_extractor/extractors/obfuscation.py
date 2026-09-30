@@ -68,7 +68,8 @@ class _Metric:
     name: str
     #: +1이면 클수록, -1이면 작을수록 난독화에 가깝다. 패키지 단위 집계 방향을 정한다.
     direction: int
-    #: 값을 정의할 수 없는 파일이면 None. 작을수록 난독화인 지표만 None을 낸다.
+    #: 계산할 대상이 없으면 None. 클수록 난독화인 지표는 None 대신 0.0을 낸다(최대값 집계에서
+    #: 0은 다른 파일의 값을 가리지 않고, 이전 버전에 대상이 없던 경우의 Change 신호를 살린다).
     compute: Callable[["_FileStats"], float | None]
 
 
@@ -130,6 +131,10 @@ def _mean_ident_length(s: _FileStats) -> float | None:
     return sum(len(t) for t in s.identifiers) / len(s.identifiers)
 
 
+def _packer_signature(s: _FileStats) -> float:
+    return 1.0 if _PACKER.search(s.text) else 0.0
+
+
 def _whitespace_ratio(s: _FileStats) -> float | None:
     if not s.text:
         return None
@@ -167,12 +172,10 @@ def aggregate(
         return None
     result: dict[str, float | None] = {}
     for metric in METRICS:
-        defined = [f for f in files if metrics_by_path[f.relative_path][metric.name] is not None]
-        if metric.direction > 0:
-            pool = defined
-        else:
-            pool = [f for f in defined if f.size_bytes >= MIN_BYTES_FOR_LOWER_IS_OBFUSCATED] or defined
-        values = [metrics_by_path[f.relative_path][metric.name] for f in pool]
+        valued = [f for f in files if metrics_by_path[f.relative_path][metric.name] is not None]
+        if metric.direction < 0:
+            valued = [f for f in valued if f.size_bytes >= MIN_BYTES_FOR_LOWER_IS_OBFUSCATED] or valued
+        values = [metrics_by_path[f.relative_path][metric.name] for f in valued]
         if not values:
             result[metric.name] = None
         else:

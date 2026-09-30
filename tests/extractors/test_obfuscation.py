@@ -175,67 +175,54 @@ def test_aggregate_of_no_files_is_none() -> None:
     assert aggregate([], {}) is None
 
 
-def test_file_without_identifiers_has_undefined_mean_ident_length() -> None:
-    metrics = file_metrics("// only a comment\nexport {};\n")
+def test_lower_is_obfuscated_metrics_are_none_when_there_is_nothing_to_measure() -> None:
+    """식별자가 없는 파일의 평균 식별자 길이는 0이 아니라 계산할 수 없는 값이다."""
+    numbers_only = file_metrics("[" + ",".join(str(i) for i in range(50)) + "]")
+    empty = file_metrics("")
 
-    assert metrics["MeanIdentLength"] is None
-    # 클수록 난독화인 지표는 0.0("난독화 흔적 없음")을 그대로 쓴다.
-    assert metrics["HexIdentRatio"] == 0.0
-    assert metrics["ShortIdentRatio"] == 0.0
-
-
-def test_empty_file_has_undefined_whitespace_ratio() -> None:
-    metrics = file_metrics("")
-
-    assert metrics["WhitespaceRatio"] is None
-    assert metrics["MeanIdentLength"] is None
-    assert metrics["EscapeDensity"] == 0.0
+    assert numbers_only["MeanIdentLength"] is None
+    assert numbers_only["WhitespaceRatio"] == 0.0
+    assert empty["MeanIdentLength"] is None
+    assert empty["WhitespaceRatio"] is None
+    # 클수록 난독화인 지표는 그대로 0.0이다.
+    assert empty["HexIdentRatio"] == 0.0
+    assert empty["HexNumberRatio"] == 0.0
 
 
-def test_files_without_identifiers_do_not_drive_mean_ident_length() -> None:
-    """주석만 있는 큰 파일이 "가장 난독화됨"(0.0)으로 패키지 값을 정하면 안 된다."""
-    comment_only = _source_file("LICENSE.js", "// Copyright (c) Example. All rights reserved.\n" * 40)
+def test_file_without_identifiers_does_not_drive_mean_ident_length_to_zero() -> None:
+    data = _source_file("data.js", "[" + ",".join(str(i) for i in range(400)) + "]")
     readable = _source_file("index.js", "function add(first, second) {\n    return first + second;\n}\n" * 40)
-    empty = _source_file("types.js", "")
-    files = [comment_only, readable, empty]
+    files = [data, readable]
+    assert data.size_bytes >= 1024
 
     result = aggregate(files, {f.relative_path: file_metrics(f.text) for f in files})
 
     assert result is not None
     assert result["MeanIdentLength"] == file_metrics(readable.text)["MeanIdentLength"]
-    # 빈 파일은 집계에서 빠진다. 주석 파일의 공백 비율은 정의되는 값이라 그대로 최소값 후보다.
-    assert result["WhitespaceRatio"] == file_metrics(comment_only.text)["WhitespaceRatio"]
-    assert result["WhitespaceRatio"] > 0
+    assert result["MeanIdentLength"] > 3
 
 
-def test_lower_is_obfuscated_metric_is_none_when_no_file_defines_it() -> None:
-    empty = _source_file("index.js", "")
+def test_small_files_are_used_when_the_only_large_file_has_no_value() -> None:
+    data = _source_file("data.js", "[" + ",".join(str(i) for i in range(400)) + "]")
+    small = _source_file("index.js", "var x = require('./data');\nmodule.exports = x;\n")
+    files = [data, small]
 
-    result = aggregate([empty], {empty.relative_path: file_metrics(empty.text)})
+    result = aggregate(files, {f.relative_path: file_metrics(f.text) for f in files})
 
     assert result is not None
-    assert result["MeanIdentLength"] is None
-    assert result["WhitespaceRatio"] is None
-    assert result["HexIdentRatio"] == 0.0
+    assert result["MeanIdentLength"] == file_metrics(small.text)["MeanIdentLength"]
 
 
-def test_changed_file_without_identifiers_leaves_mean_ident_length_changed_code_missing(
+def test_package_where_no_file_has_identifiers_has_missing_mean_ident_length(
     extractor: ObfuscationExtractor, tmp_path: Path
 ) -> None:
-    readable = "function add(first, second) {\n    return first + second;\n}\n" * 40
-    old = _write(tmp_path / "old", {"index.js": readable})
-    new = _write(tmp_path / "new", {"index.js": readable, "notes.js": "// release notes\n" * 100})
+    old = _write(tmp_path / "old", {"index.js": "module.exports = 1;\n"})
+    new = _write(tmp_path / "new", {"index.js": "[1, 2, 3]\n"})
 
     features = extractor.extract(_snapshot("1.0.0", old), _snapshot("1.0.1", new))
 
-    assert features["obfChangedFileCount"] == 1
+    assert features["obfMeanIdentLengthNew"] is None
+    assert features["obfMeanIdentLengthChange"] is None
     assert features["obfMeanIdentLengthChangedCode"] is None
-    assert features["obfHexIdentRatioChangedCode"] == 0.0
-    assert features["obfMeanIdentLengthNew"] == file_metrics(readable)["MeanIdentLength"]
-    assert features["obfMeanIdentLengthChange"] == 0.0
-
-
-def test_packer_signature_is_not_emitted() -> None:
-    """packer 흔적 지표는 실제 데이터에서 한 번도 나오지 않아 출력에서 뺐다."""
-    assert "PackerSignature" not in {metric.name for metric in METRICS}
-    assert len(EXPECTED_COLUMNS) == 22
+    assert features["obfWhitespaceRatioNew"] is not None
+    assert features["obfHexIdentRatioNew"] == 0.0
