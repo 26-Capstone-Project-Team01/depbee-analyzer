@@ -180,7 +180,7 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 
 ## 구현된 feature
 
-지표 8개를 파일별로 계산하고, 팀 설계(방안 1+2)에 맞춰 세 가지 값으로 냅니다. 컬럼 이름은 `obf` + 지표 이름 + 접미어입니다(예: `obfHexIdentRatioChangedCode`).
+지표 7개를 파일별로 계산하고, 팀 설계(방안 1+2)에 맞춰 세 가지 값으로 냅니다. 컬럼 이름은 `obf` + 지표 이름 + 접미어입니다(예: `obfHexIdentRatioChangedCode`).
 
 | 지표 | 의미 | 난독화 쪽 |
 | --- | --- | --- |
@@ -190,7 +190,6 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 | `EscapeDensity` | `\xNN`, `\uNNNN` 이스케이프가 차지하는 문자 비율 | 클수록 |
 | `ShortIdentRatio` | 길이 2 이하 식별자 비율 | 클수록 |
 | `MeanIdentLength` | 식별자 평균 길이 | 작을수록 |
-| `PackerSignature` | `eval(function(p,a,c,k,e,d)` packer 흔적 (0/1) | 1 |
 | `WhitespaceRatio` | 공백 문자 비율 | 작을수록 |
 
 | 접미어 | 계산 대상 | 팀 설계상 위치 |
@@ -211,6 +210,7 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 제외한 후보와 이유:
 
 - `stringArraySignature`: 최신 javascript-obfuscator 출력에서 발화하지 않고, 긴 문자열 배열 조건이 정상 minify 코드에서 켜집니다.
+- `PackerSignature`(`eval(function(p,a,c,k,e,d)` packer 흔적, 0/1): 처음에는 지표 8개 중 하나로 넣었다가 뺐습니다(2026-09-29). 합성 벤치마크(1절)에서는 packer를 100% 잡았지만, 실제 dataset(악성 849, 무작위 benign 1,999, 어려운 benign 299쌍)의 New·Change·ChangedCode 값이 전부 0이었고, 악성 archive의 `malicious_raw`·`normal_raw` JS 60,421개를 extractor 정규식과 느슨한 `function(p,a,c,k,e,` 패턴으로 모두 찾아도 0건이었습니다. 값이 상수라 학습에 쓸 정보가 없고, 결측 여부도 다른 지표와 같아 따로 담는 정보가 없었습니다. archive의 `eval(function(` 47건은 packer가 아니라 문자코드 배열을 푸는 ROT-n 디코더(`function(s,n)`)였습니다. 1절에서 packer는 `shortIdentRatio`로도 100% 잡혔습니다. packer 표본이 데이터에 들어오면 이 커밋 이전의 `_PACKER` 정규식과 `_packer_signature`를 `METRICS`에 되돌리고 전체를 다시 추출하면 됩니다.
 - 줄 길이, 엔트로피, 문자열 길이, base64/hex 연속 길이: 난독화가 아니라 minify·번들 신호입니다.
 - `eval`/`Function`·디코딩 호출 수: 정상 번들에 흔해 단독 신호가 되지 못합니다.
 
@@ -219,10 +219,12 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 팀이 쓰는 결과는 `npm-malware-package-pairs/derived/obfuscation_features/`에 있습니다. `package_json_features/`와 같은 형식으로 난독화 feature만 담았고, 파일 설명은 그 디렉터리의 README에 있습니다.
 package.json feature까지 함께 담은 학습용 합본은 `derived/combined_features/`에 있습니다. 이전에 만든 로컬 합본은 `data/processed/`(커밋 대상 아님)에 있고, 각 파일을 만든 커밋·입력·행 수는 `data/processed/MANIFEST.json`에 기록했습니다.
 
-- `malicious_combined_features.csv`: 악성 849행(errors 48행은 archive 상태 문제 47건과 `package.json` 후보가 둘인 1건).
-- `benign_combined_features.csv`: 무작위 benign 1,999행(errors 1행은 Windows에서 만들 수 없는 파일 이름이 든 tarball).
-- `hard_benign_combined_features.csv`: 어려운 benign 299쌍(5절).
-- `derived/pairs/malicious_pair_groups.csv`: 악성 pair별 campaign과 페이로드 해시(849행). 학습할 때 중복 제거와 campaign 단위 분할에 씁니다. 고유 페이로드는 (campaign, 해시) 기준으로 가장 큰 변경 파일 132개, 변경 파일 전체 153개입니다. 추가·수정된 JS가 없는 32쌍은 해시가 빈 값이고, 위 수에는 campaign마다 빈 값 하나로 들어 있습니다.
+pair의 old는 같은 release line의 이전 stable 버전입니다(`derived/pairs/baseline_rule.py`, 규칙과 결과는 `derived/README.md`). new가 prerelease인 pair와 baseline이 없는 악성은 주 학습셋에서 빼 `combined_features/holdout/`에 둡니다. 2026-09-29에 `batch-manifest`로 Linux에서 다시 추출했습니다.
+
+- `malicious_combined_features.csv`: 악성 주 학습셋 836행(baseline 없는 14쌍은 holdout, errors 47행은 archive 상태 문제).
+- `benign_combined_features.csv`: 무작위 benign 2,000행(부족분은 같은 규칙으로 재샘플링).
+- `hard_benign_combined_features.csv`: 어려운 benign 299쌍(`install_script_added` 150, `bundle_growth` 149, 5절).
+- `derived/pairs/malicious_pair_groups.csv`: 악성 pair별 campaign과 페이로드 해시(주 학습셋 836 + holdout 14 = 850행). 학습할 때 중복 제거와 campaign 단위 분할에 씁니다. 고유 페이로드는 (campaign, 해시) 기준으로 가장 큰 변경 파일 131개, 변경 파일 전체 134개입니다(주 학습셋만 129개, 132개). 추가·수정된 JS가 없는 31쌍은 해시가 빈 값이고, 위 수에는 campaign마다 빈 값 하나로 들어 있습니다.
 - `derived/pairs/excluded_benign_pairs.csv`, `derived/pairs/benign_osv_screening.csv`: benign에서 뺀 pair와 OSV 대조 결과.
 
 ## 남은 과제

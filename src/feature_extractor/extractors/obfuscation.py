@@ -11,8 +11,12 @@
     - ``...ChangedCode``: 이번 업데이트에서 추가·수정된 파일만
 - 값을 계산할 파일이 없으면 0으로 채우지 않고 None으로 둔다(CSV에서는 빈 칸,
   LightGBM에서는 결측). ``obfChangedFileCount``가 0이면 ``...ChangedCode``가 모두 None이다.
-- 작을수록 난독화인 지표는 파일에서 값을 계산할 수 없으면(식별자가 없거나 빈 파일) None을 내고
-  집계에서 뺀다. 0으로 두면 최솟값 집계에서 그 파일이 가짜 난독화 신호가 된다.
+- 작을수록 난독화인 지표(MeanIdentLength, WhitespaceRatio)는 파일에서 값을 정의할 수 없으면
+  (식별자가 없는 파일, 빈 파일) 0.0이 아니라 None을 내고 집계에서 뺀다. 0.0은 이 지표에서
+  "가장 난독화됨"이라는 극단값이라, 주석만 있는 파일 하나가 패키지 값을 정해 버리기 때문이다.
+  클수록 난독화인 지표는 0.0이 "난독화 흔적 없음"이라 최대값 집계에 해가 없으므로 그대로 둔다.
+- packer(``eval(function(p,a,c,k,e,d)``) 흔적 지표는 뺐다. 실제 dataset 3,147쌍과 archive JS
+  60,421개에서 한 번도 나오지 않아 정보가 없었다. 근거와 복원 방법은 설계 문서에 있다.
 """
 
 from __future__ import annotations
@@ -39,7 +43,6 @@ _HEX_IDENT = re.compile(r"_0x[0-9a-fA-F]{3,}")
 _NUMBER = re.compile(r"\b(?:0x[0-9a-fA-F]+|\d+)\b")
 _HEX_ESCAPE = re.compile(r"\\x[0-9a-fA-F]{2}")
 _UNICODE_ESCAPE = re.compile(r"\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\}")
-_PACKER = re.compile(r"eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*[dr]\s*\)")
 # 멤버 접근 중 키가 문자열 리터럴이거나 _0x 계열 함수 호출인 것: obj['x'], obj['\x78'], obj[_0xab(0x1)]
 _BRACKET_ACCESS = re.compile(r"[\w$)\]]\s*\[\s*(?:'|\"|_0x[0-9a-fA-F]+\s*\()")
 _DOT_ACCESS = re.compile(r"\.[A-Za-z_$]")
@@ -146,13 +149,12 @@ METRICS: tuple[_Metric, ...] = (
     _Metric("EscapeDensity", +1, _escape_density),
     _Metric("ShortIdentRatio", +1, _short_ident_ratio),
     _Metric("MeanIdentLength", -1, _mean_ident_length),
-    _Metric("PackerSignature", +1, _packer_signature),
     _Metric("WhitespaceRatio", -1, _whitespace_ratio),
 )
 
 
 def file_metrics(text: str) -> dict[str, float | None]:
-    """파일 하나의 난독화 지표."""
+    """파일 하나의 난독화 지표. 정의할 수 없는 지표는 None이다."""
     stats = _file_stats(text)
     return {metric.name: metric.compute(stats) for metric in METRICS}
 
@@ -163,8 +165,8 @@ def aggregate(
     """여러 파일의 지표를 패키지 단위 하나로 모은다. 파일이 없으면 None.
 
     파일 하나만 난독화된 경우에도 신호가 희석되지 않도록 난독화 쪽 극값을 쓴다
-    (방향 +1은 최대값, -1은 1KB 이상 파일의 최소값). 값이 None인 파일은 빼고,
-    모든 파일이 None이면 그 지표는 None이다.
+    (방향 +1은 최대값, -1은 1KB 이상 파일의 최소값). 값이 None인 파일은 그 지표의
+    집계에서 빼고, 남는 파일이 없으면 그 지표는 None이다.
     """
     if not files:
         return None

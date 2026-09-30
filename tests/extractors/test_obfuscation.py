@@ -73,7 +73,6 @@ def test_obfuscated_update_is_reflected_in_new_change_and_changed_code(extractor
     assert features["obfHexNumberRatioChangedCode"] == 1.0
     assert features["obfBracketAccessRatioChangedCode"] == 1.0
     assert features["obfEscapeDensityChangedCode"] > 0.1
-    assert features["obfPackerSignatureChangedCode"] == 0.0
 
 
 def test_unchanged_update_has_missing_changed_code_values_not_zero(
@@ -136,13 +135,6 @@ def test_typescript_enum_members_are_not_counted_as_bracket_access() -> None:
     assert file_metrics(compiled_enum)["BracketAccessRatio"] == 0.0
     assert file_metrics(commonjs_enum)["BracketAccessRatio"] == 0.0
     assert file_metrics("var x = obj['secret'];")["BracketAccessRatio"] == 1.0
-
-
-def test_packer_signature_is_detected_anywhere_in_the_file() -> None:
-    packed = "var a = 1;\neval(function(p,a,c,k,e,d){return p}('0',62,1,'x'.split('|'),0,{}))"
-
-    assert file_metrics(packed)["PackerSignature"] == 1.0
-    assert file_metrics("eval(code)")["PackerSignature"] == 0.0
 
 
 def test_strings_and_comments_do_not_count_as_identifiers() -> None:

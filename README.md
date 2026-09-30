@@ -39,6 +39,17 @@ feature-extractor batch-local --archive-root ../npm-malware-package-pairs --outp
 feature-extractor batch --pairs-file ../npm-malware-package-pairs/data/pairs.csv --output data/processed/dataset.csv --extractors package_json
 ```
 
+pair마다 old/new를 어디서 읽을지 다르게 지정해야 할 때는 `batch-manifest`를 씁니다. 예를 들어 악성 버전은 registry에서 삭제돼 archive에서 읽고, baseline은 archive에 없는 같은 release line의 버전이라 registry에서 받는 경우입니다.
+
+```bash
+feature-extractor batch-manifest \
+  --manifest ../npm-malware-package-pairs/derived/pairs/baselines.csv \
+  --archive-root ../npm-malware-package-pairs \
+  --output data/processed/dataset.csv
+```
+
+manifest 컬럼은 `package,old_version,new_version,label,old_source,new_source`이고(다른 컬럼은 무시), 출처는 `registry` 또는 `archive:<archive-root 기준 raw 디렉터리>`입니다(예: `archive:axios_2026-03/axios/malicious_raw`). archive 밖을 가리키는 경로나 알 수 없는 출처가 있으면 결과 파일을 건드리기 전에 종료 코드 2로 멈춥니다.
+
 extractor별 CSV를 합칠 때는 `package,old_version,new_version`으로 join합니다. extractor마다 실패하는 pair가 다를 수 있어 CSV끼리 행 집합이 같다는 보장은 없습니다.
 
 `obfuscation` extractor는 소스 코드가 필요하므로, 기본 실행 시 `batch`는 pair마다 두 버전의 tarball을 registry에서 내려받습니다. 받은 tarball은 pair 처리가 끝나면 지웁니다. `batch-local`은 archive에 있는 소스를 읽으므로 tarball을 받지 않습니다.
@@ -50,7 +61,7 @@ extractor별 CSV를 합칠 때는 `package,old_version,new_version`으로 join�
 | extractor | 상태 |
 | --- | --- |
 | `package_json` | 구현 완료, registry 등록됨 |
-| `obfuscation` | 구현 완료, registry 등록됨. 난독화 지표 8개를 새 버전 전체(`...New`), 이전 대비 변화(`...Change`), 변경된 코드(`...ChangedCode`) 세 가지로 냅니다(`obf` 접두어, 25개 컬럼). 지표 선정 근거와 평가는 [docs/obfuscation-features.md](docs/obfuscation-features.md) 참고 |
+| `obfuscation` | 구현 완료, registry 등록됨. 난독화 지표 7개를 새 버전 전체(`...New`), 이전 대비 변화(`...Change`), 변경된 코드(`...ChangedCode`) 세 가지로 냅니다(`obf` 접두어, 22개 컬럼). 지표 선정 근거와 평가는 [docs/obfuscation-features.md](docs/obfuscation-features.md) 참고 |
 
 ## 새 extractor 추가하기
 
