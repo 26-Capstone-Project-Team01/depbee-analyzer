@@ -12,9 +12,10 @@ from feature_extractor.core.pipeline import build_row
 from feature_extractor.core.sources import LocalArchiveSnapshotSource
 from feature_extractor.extractors.base import BaseExtractor
 
-#: npm-malware-package-pairs는 전부 실제 악성 업데이트 사례를 다루는 저장소이므로
-#: (meta.json 897개 전수 조사로 확인: status="ok"인 850개 전부가 정상->악성 구조,
-#: 나머지 47개는 status가 http_error_404/no_clean_baseline_found로 애초에 제외됨) label은 고정값.
+#: npm-malware-package-pairs는 실제 악성 업데이트 사례만 모은 저장소이므로 label은 고정값이다.
+#: iter_pair_dirs가 정상->악성 pair로 읽을 수 있는 항목(status="ok"이고 normal_version과 악성 버전이
+#: 모두 있는 meta.json)만 내보내고, 나머지(http_error_404, no_clean_baseline_found, 정상 버전 없음 등)는
+#: 사유와 함께 errors로 남긴다. archive에 사례가 추가되어도 이 규칙은 그대로다.
 LOCAL_ARCHIVE_LABEL = 1
 
 
