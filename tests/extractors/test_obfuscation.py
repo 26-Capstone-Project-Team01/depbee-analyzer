@@ -73,7 +73,6 @@ def test_obfuscated_update_is_reflected_in_new_change_and_changed_code(extractor
     assert features["obfHexNumberRatioChangedCode"] == 1.0
     assert features["obfBracketAccessRatioChangedCode"] == 1.0
     assert features["obfEscapeDensityChangedCode"] > 0.1
-    assert features["obfPackerSignatureChangedCode"] == 0.0
 
 
 def test_unchanged_update_has_missing_changed_code_values_not_zero(
@@ -138,13 +137,6 @@ def test_typescript_enum_members_are_not_counted_as_bracket_access() -> None:
     assert file_metrics("var x = obj['secret'];")["BracketAccessRatio"] == 1.0
 
 
-def test_packer_signature_is_detected_anywhere_in_the_file() -> None:
-    packed = "var a = 1;\neval(function(p,a,c,k,e,d){return p}('0',62,1,'x'.split('|'),0,{}))"
-
-    assert file_metrics(packed)["PackerSignature"] == 1.0
-    assert file_metrics("eval(code)")["PackerSignature"] == 0.0
-
-
 def test_strings_and_comments_do_not_count_as_identifiers() -> None:
     metrics = file_metrics("// _0xabc _0xdef\nvar name = '_0x123 _0x456';\n")
 
@@ -181,3 +173,69 @@ def test_aggregate_uses_the_most_obfuscated_file_for_higher_is_obfuscated_metric
 
 def test_aggregate_of_no_files_is_none() -> None:
     assert aggregate([], {}) is None
+
+
+def test_file_without_identifiers_has_undefined_mean_ident_length() -> None:
+    metrics = file_metrics("// only a comment\nexport {};\n")
+
+    assert metrics["MeanIdentLength"] is None
+    # 클수록 난독화인 지표는 0.0("난독화 흔적 없음")을 그대로 쓴다.
+    assert metrics["HexIdentRatio"] == 0.0
+    assert metrics["ShortIdentRatio"] == 0.0
+
+
+def test_empty_file_has_undefined_whitespace_ratio() -> None:
+    metrics = file_metrics("")
+
+    assert metrics["WhitespaceRatio"] is None
+    assert metrics["MeanIdentLength"] is None
+    assert metrics["EscapeDensity"] == 0.0
+
+
+def test_files_without_identifiers_do_not_drive_mean_ident_length() -> None:
+    """주석만 있는 큰 파일이 "가장 난독화됨"(0.0)으로 패키지 값을 정하면 안 된다."""
+    comment_only = _source_file("LICENSE.js", "// Copyright (c) Example. All rights reserved.\n" * 40)
+    readable = _source_file("index.js", "function add(first, second) {\n    return first + second;\n}\n" * 40)
+    empty = _source_file("types.js", "")
+    files = [comment_only, readable, empty]
+
+    result = aggregate(files, {f.relative_path: file_metrics(f.text) for f in files})
+
+    assert result is not None
+    assert result["MeanIdentLength"] == file_metrics(readable.text)["MeanIdentLength"]
+    # 빈 파일은 집계에서 빠진다. 주석 파일의 공백 비율은 정의되는 값이라 그대로 최소값 후보다.
+    assert result["WhitespaceRatio"] == file_metrics(comment_only.text)["WhitespaceRatio"]
+    assert result["WhitespaceRatio"] > 0
+
+
+def test_lower_is_obfuscated_metric_is_none_when_no_file_defines_it() -> None:
+    empty = _source_file("index.js", "")
+
+    result = aggregate([empty], {empty.relative_path: file_metrics(empty.text)})
+
+    assert result is not None
+    assert result["MeanIdentLength"] is None
+    assert result["WhitespaceRatio"] is None
+    assert result["HexIdentRatio"] == 0.0
+
+
+def test_changed_file_without_identifiers_leaves_mean_ident_length_changed_code_missing(
+    extractor: ObfuscationExtractor, tmp_path: Path
+) -> None:
+    readable = "function add(first, second) {\n    return first + second;\n}\n" * 40
+    old = _write(tmp_path / "old", {"index.js": readable})
+    new = _write(tmp_path / "new", {"index.js": readable, "notes.js": "// release notes\n" * 100})
+
+    features = extractor.extract(_snapshot("1.0.0", old), _snapshot("1.0.1", new))
+
+    assert features["obfChangedFileCount"] == 1
+    assert features["obfMeanIdentLengthChangedCode"] is None
+    assert features["obfHexIdentRatioChangedCode"] == 0.0
+    assert features["obfMeanIdentLengthNew"] == file_metrics(readable)["MeanIdentLength"]
+    assert features["obfMeanIdentLengthChange"] == 0.0
+
+
+def test_packer_signature_is_not_emitted() -> None:
+    """packer 흔적 지표는 실제 데이터에서 한 번도 나오지 않아 출력에서 뺐다."""
+    assert "PackerSignature" not in {metric.name for metric in METRICS}
+    assert len(EXPECTED_COLUMNS) == 22

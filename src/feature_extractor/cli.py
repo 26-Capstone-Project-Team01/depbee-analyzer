@@ -6,6 +6,7 @@ from pathlib import Path
 
 from feature_extractor.core.errors import FeatureExtractorError
 from feature_extractor.core.local_dataset import run_local_archive_batch
+from feature_extractor.core.manifest import run_manifest_batch
 from feature_extractor.core.pipeline import build_row, resolve_extractors, run_batch
 
 
@@ -105,6 +106,37 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_extractors_argument(batch_local)
 
+    batch_manifest = subparsers.add_parser(
+        "batch-manifest",
+        help=(
+            "pair마다 old/new 출처(registry 또는 archive)를 지정한 manifest로 dataset.csv를 "
+            "생성한다 (예: archive의 악성 버전 + registry의 baseline)"
+        ),
+    )
+    batch_manifest.add_argument(
+        "--manifest",
+        required=True,
+        type=Path,
+        dest="manifest_path",
+        help="package,old_version,new_version,label,old_source,new_source 컬럼을 가진 CSV. "
+        "출처는 'registry' 또는 'archive:<archive-root 기준 raw 디렉터리>'",
+    )
+    batch_manifest.add_argument(
+        "--archive-root",
+        type=Path,
+        default=None,
+        help="manifest에 archive: 출처가 있을 때 필요한 npm-malware-package-pairs 로컬 클론 경로",
+    )
+    batch_manifest.add_argument("--output", required=True, type=Path, dest="output_csv_path")
+    batch_manifest.add_argument(
+        "--errors-output",
+        type=Path,
+        dest="errors_csv_path",
+        default=None,
+        help="생략하면 --output과 같은 디렉터리에 dataset.errors.csv로 생성한다",
+    )
+    _add_extractors_argument(batch_manifest)
+
     return parser
 
 
@@ -143,6 +175,21 @@ def main(argv: list[str] | None = None) -> int:
                 args.archive_root, args.output_csv_path, errors_csv_path, extractors, limit=args.limit
             )
         except _PATH_ERRORS as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_INVALID_INPUT
+        return 0
+
+    if args.command == "batch-manifest":
+        errors_csv_path = args.errors_csv_path or args.output_csv_path.with_name("dataset.errors.csv")
+        try:
+            run_manifest_batch(
+                args.manifest_path,
+                args.output_csv_path,
+                errors_csv_path,
+                extractors,
+                archive_root=args.archive_root,
+            )
+        except (*_PATH_ERRORS, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return EXIT_INVALID_INPUT
         return 0
