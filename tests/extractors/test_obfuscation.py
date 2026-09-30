@@ -226,3 +226,9 @@ def test_package_where_no_file_has_identifiers_has_missing_mean_ident_length(
     assert features["obfMeanIdentLengthChangedCode"] is None
     assert features["obfWhitespaceRatioNew"] is not None
     assert features["obfHexIdentRatioNew"] == 0.0
+
+
+def test_packer_signature_is_not_emitted() -> None:
+    """packer 흔적 지표는 실제 데이터에서 한 번도 나오지 않아 출력에서 뺐다."""
+    assert "PackerSignature" not in {metric.name for metric in METRICS}
+    assert len(EXPECTED_COLUMNS) == 22
