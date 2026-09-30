@@ -219,12 +219,12 @@ benign 500쌍에서의 발화율은 0%(0/500)입니다. 발화율은 변경된 �
 팀이 쓰는 결과는 `npm-malware-package-pairs/derived/obfuscation_features/`에 있습니다. `package_json_features/`와 같은 형식으로 난독화 feature만 담았고, 파일 설명은 그 디렉터리의 README에 있습니다.
 package.json feature까지 함께 담은 학습용 합본은 `derived/combined_features/`에 있습니다. 이전에 만든 로컬 합본은 `data/processed/`(커밋 대상 아님)에 있고, 각 파일을 만든 커밋·입력·행 수는 `data/processed/MANIFEST.json`에 기록했습니다.
 
-pair의 old는 같은 release line의 이전 stable 버전입니다(`derived/pairs/baseline_rule.py`, 규칙과 결과는 `derived/README.md`). new가 prerelease인 pair와 baseline이 없는 악성은 주 학습셋에서 빼 `combined_features/holdout/`에 둡니다. 2026-09-29에 `batch-manifest`로 Linux에서 다시 추출했습니다.
+pair의 old는 같은 release line의 이전 stable 버전입니다(`derived/pairs/baseline_rule.py`, 규칙과 결과는 `derived/README.md`). new가 prerelease인 pair와 baseline이 없는 악성은 주 학습셋에서 빼 `combined_features/holdout/`에 둡니다. 2026-09-29에 `batch-manifest`로 Linux에서 다시 추출했고, 2026-09-30에 4차 수집 111쌍을 같은 규칙과 파이프라인으로 덧붙였습니다.
 
-- `malicious_combined_features.csv`: 악성 주 학습셋 836행(baseline 없는 14쌍은 holdout, errors 47행은 archive 상태 문제).
+- `malicious_combined_features.csv`: 악성 주 학습셋 947행(baseline 없는 14쌍은 holdout, errors 77행은 archive 상태 문제).
 - `benign_combined_features.csv`: 무작위 benign 2,000행(부족분은 같은 규칙으로 재샘플링).
 - `hard_benign_combined_features.csv`: 어려운 benign 299쌍(`install_script_added` 150, `bundle_growth` 149, 5절).
-- `derived/pairs/malicious_pair_groups.csv`: 악성 pair별 campaign과 페이로드 해시(주 학습셋 836 + holdout 14 = 850행). 학습할 때 중복 제거와 campaign 단위 분할에 씁니다. 고유 페이로드는 (campaign, 해시) 기준으로 가장 큰 변경 파일 131개, 변경 파일 전체 134개입니다(주 학습셋만 129개, 132개). 추가·수정된 JS가 없는 31쌍은 해시가 빈 값이고, 위 수에는 campaign마다 빈 값 하나로 들어 있습니다.
+- `derived/pairs/malicious_pair_groups.csv`: 악성 pair별 campaign과 페이로드 해시(주 학습셋 947 + holdout 14 = 961행). 학습할 때 중복 제거와 campaign 단위 분할에 씁니다. 고유 페이로드는 (campaign, 해시) 기준으로 가장 큰 변경 파일 145개, 변경 파일 전체 148개입니다(주 학습셋만 143개, 146개). 추가·수정된 JS가 없는 129쌍은 해시가 빈 값이고, 위 수에는 campaign마다 빈 값 하나로 들어 있습니다. `splitGroup`은 Train/Test에서 한쪽에만 들어가야 하는 묶음으로, campaign 22개가 그대로 22개 group이 됩니다. 같은 악성 의존성 `easy-day-js`를 추가한 4차 수집의 `@mastra/*` 104쌍은 `mastra-easy-day-js_2026-06`에 합쳐 이 group이 119쌍입니다.
 - `derived/pairs/excluded_benign_pairs.csv`, `derived/pairs/benign_osv_screening.csv`: benign에서 뺀 pair와 OSV 대조 결과.
 
 ## 남은 과제

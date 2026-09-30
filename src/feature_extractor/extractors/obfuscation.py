@@ -131,10 +131,6 @@ def _mean_ident_length(s: _FileStats) -> float | None:
     return sum(len(t) for t in s.identifiers) / len(s.identifiers)
 
 
-def _packer_signature(s: _FileStats) -> float:
-    return 1.0 if _PACKER.search(s.text) else 0.0
-
-
 def _whitespace_ratio(s: _FileStats) -> float | None:
     if not s.text:
         return None
