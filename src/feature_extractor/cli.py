@@ -43,7 +43,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="feature-extractor",
         description=(
             "npm package.json / obfuscation feature 추출 도구. "
-            "개발·dataset 생성용이며 최종 사용자 CLI는 npm-update-guard repo에 있다."
+            "개발·dataset 생성용이며 최종 사용자 CLI는 depbee repo에 있다."
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
