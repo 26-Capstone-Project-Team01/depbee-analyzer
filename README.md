@@ -2,13 +2,13 @@
 
 npm package의 (old_version, new_version) pair로부터 LightGBM 학습용 feature를 추출해 dataset을 생성하는 **개발/데이터셋 생성용** 도구입니다.
 
-> 이 repo의 CLI는 최종 사용자용이 아닙니다. 학습된 모델을 사용하는 최종 CLI/서비스는 별도 repo `npm-update-guard`에서 구현됩니다.
+> 이 repo의 CLI는 최종 사용자용이 아닙니다. 학습된 모델을 사용하는 최종 CLI/서비스는 별도 repo `depbee`에서 구현됩니다.
 
 ## 관련 repository
 
 - `npm-malware-package-pairs`: 분석 대상 package pair(`pairs.csv`) 원본 관리. 이 repo는 그 경로만 입력으로 받으며 내용을 소유하지 않습니다.
 - `feature-extractor` (이 repo): feature 추출 및 dataset(`dataset.csv`) 생성.
-- `npm-update-guard`: 학습된 모델을 사용하는 최종 사용자 CLI/서비스.
+- `depbee`: 학습된 모델을 사용하는 최종 사용자 CLI/서비스.
 
 ## 설치
 
