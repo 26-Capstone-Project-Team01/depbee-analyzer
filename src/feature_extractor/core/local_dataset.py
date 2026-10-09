@@ -22,7 +22,7 @@ LOCAL_ARCHIVE_LABEL = 1
 def iter_pair_dirs(
     archive_root: Path,
 ) -> Iterator[tuple[Path, dict[str, Any] | None, str | None]]:
-    """archive_root(<campaign>/<package>/meta.json 구조) 전체를 순회하며,
+    """archive_root(pairs/<campaign>/<pair_dir>/meta.json 구조) 전체를 순회하며,
     (package_dir, meta, exclusion_reason)을 내보낸다.
 
     exclusion_reason이 None이면 유효한 pair(meta는 status="ok"이고 normal_version/
@@ -30,7 +30,7 @@ def iter_pair_dirs(
     이를 dataset.errors.csv에 남기도록 하기 위함이며, 여기서 임의로 label을 붙이거나
     건너뛰지 않는다.
     """
-    for meta_path in sorted(archive_root.glob("*/*/meta.json")):
+    for meta_path in sorted(archive_root.glob("pairs/*/*/meta.json")):
         package_dir = meta_path.parent
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -78,9 +78,9 @@ def run_local_archive_batch(
     """
     if not archive_root.is_dir():
         raise FileNotFoundError(f"archive root is not a directory: {archive_root}")
-    if next(archive_root.glob("*/*/meta.json"), None) is None:
+    if next(archive_root.glob("pairs/*/*/meta.json"), None) is None:
         raise FileNotFoundError(
-            f"no <campaign>/<package>/meta.json found under {archive_root}; "
+            f"no pairs/<campaign>/<pair_dir>/meta.json found under {archive_root}; "
             "is this the root of an npm-malware-package-pairs clone?"
         )
     prepare_outputs(output_csv_path, errors_csv_path)

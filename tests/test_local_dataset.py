@@ -21,7 +21,7 @@ def _write_package_json(base: Path, name: str, version: str, scripts: dict | Non
 
 
 def _make_valid_pair(archive_root: Path, campaign: str, package_dir_name: str, package_name: str) -> None:
-    package_dir = archive_root / campaign / package_dir_name
+    package_dir = archive_root / "pairs" / campaign / package_dir_name
     package_dir.mkdir(parents=True)
     meta = {
         "package": package_name,
@@ -37,7 +37,7 @@ def _make_valid_pair(archive_root: Path, campaign: str, package_dir_name: str, p
 
 
 def _make_excluded_pair(archive_root: Path, campaign: str, package_dir_name: str, package_name: str) -> None:
-    package_dir = archive_root / campaign / package_dir_name
+    package_dir = archive_root / "pairs" / campaign / package_dir_name
     package_dir.mkdir(parents=True)
     # 실제 저장소에서 관찰된 "예외" 스키마: normal_version이 아예 없고 status가 ok가 아님.
     meta = {
