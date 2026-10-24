@@ -88,7 +88,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--archive-root",
         required=True,
         type=Path,
-        help="npm-malware-package-pairs를 로컬에 클론한 경로 (<campaign>/<package>/meta.json 구조)",
+        help="npm-malware-package-pairs를 로컬에 클론한 경로 (pairs/<campaign>/<pair_dir>/meta.json 구조)",
     )
     batch_local.add_argument("--output", required=True, type=Path, dest="output_csv_path")
     batch_local.add_argument(
