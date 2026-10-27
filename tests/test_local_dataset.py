@@ -61,6 +61,16 @@ def test_iter_pair_dirs_separates_valid_and_excluded(tmp_path: Path) -> None:
     assert "http_error_404" in reasons_by_package["pkg-bad"]
 
 
+def test_iter_pair_dirs_skips_pairs_under_excluded_reason_dirs(tmp_path: Path) -> None:
+    # pairs/_excluded/<사유>/<pair>/는 학습·Test에 쓰지 않는 보관 위치라 status가 ok여도 읽지 않는다.
+    _make_valid_pair(tmp_path, "campaign-a", "pkg-good", "pkg-good")
+    _make_valid_pair(tmp_path, "_excluded/no_baseline", "pkg-kept-aside", "pkg-kept-aside")
+
+    packages = [r[1]["package"] for r in iter_pair_dirs(tmp_path)]
+
+    assert packages == ["pkg-good"]
+
+
 @patch("feature_extractor.core.local_dataset.fetch_packument")
 def test_run_local_archive_batch_writes_dataset_and_excludes_invalid(mock_fetch_packument, tmp_path: Path) -> None:
     archive_root = tmp_path / "archive"
