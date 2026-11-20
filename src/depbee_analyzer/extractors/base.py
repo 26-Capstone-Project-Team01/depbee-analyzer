@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from feature_extractor.core.models import PackageVersionSnapshot
+from depbee_analyzer.core.models import PackageVersionSnapshot
 
 
 class BaseExtractor(ABC):

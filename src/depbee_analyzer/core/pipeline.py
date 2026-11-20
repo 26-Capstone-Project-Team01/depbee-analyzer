@@ -4,12 +4,12 @@ import csv
 from pathlib import Path
 from typing import Iterable
 
-from feature_extractor.core.errors import FeatureExtractorError
-from feature_extractor.core.models import FeatureRow
-from feature_extractor.core.output import append_error, prepare_outputs, write_dataset
-from feature_extractor.core.sources import RegistrySnapshotSource, SnapshotSource
-from feature_extractor.extractors import EXTRACTOR_REGISTRY
-from feature_extractor.extractors.base import BaseExtractor
+from depbee_analyzer.core.errors import FeatureExtractorError
+from depbee_analyzer.core.models import FeatureRow
+from depbee_analyzer.core.output import append_error, prepare_outputs, write_dataset
+from depbee_analyzer.core.sources import RegistrySnapshotSource, SnapshotSource
+from depbee_analyzer.extractors import EXTRACTOR_REGISTRY
+from depbee_analyzer.extractors.base import BaseExtractor
 
 
 def resolve_extractors(names: Iterable[str] | None) -> list[BaseExtractor]:

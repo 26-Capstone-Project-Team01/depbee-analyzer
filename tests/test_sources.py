@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
-from feature_extractor.core.errors import LoaderError
-from feature_extractor.core.sources import LocalArchiveSnapshotSource, RegistrySnapshotSource
+from depbee_analyzer.core.errors import LoaderError
+from depbee_analyzer.core.sources import LocalArchiveSnapshotSource, RegistrySnapshotSource
 
 PACKUMENT = {
     "versions": {
@@ -20,7 +20,7 @@ PACKUMENT = {
 }
 
 
-@patch("feature_extractor.core.sources.fetch_packument")
+@patch("depbee_analyzer.core.sources.fetch_packument")
 def test_registry_source_fetches_packument_once_for_two_versions(mock_fetch_packument) -> None:
     mock_fetch_packument.return_value = PACKUMENT
     source = RegistrySnapshotSource()

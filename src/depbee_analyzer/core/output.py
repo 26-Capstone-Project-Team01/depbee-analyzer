@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from feature_extractor.core.models import FeatureRow
+from depbee_analyzer.core.models import FeatureRow
 
 ERRORS_CSV_HEADER = ["source_ref", "package", "old_version", "new_version", "reason"]
 

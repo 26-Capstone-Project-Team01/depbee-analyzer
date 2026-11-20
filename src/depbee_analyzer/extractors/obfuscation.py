@@ -25,9 +25,9 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from feature_extractor.core.models import PackageVersionSnapshot
-from feature_extractor.core.source_files import SourceFile, SourceFileSet, collect_source_files
-from feature_extractor.extractors.base import BaseExtractor
+from depbee_analyzer.core.models import PackageVersionSnapshot
+from depbee_analyzer.core.source_files import SourceFile, SourceFileSet, collect_source_files
+from depbee_analyzer.extractors.base import BaseExtractor
 
 # 주석, 문자열, 템플릿 리터럴. 선형 시간에 매칭되도록 작성했다(정규식 리터럴은 구분하지 못한다).
 _LEX = re.compile(

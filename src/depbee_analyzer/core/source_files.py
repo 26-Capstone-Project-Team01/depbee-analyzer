@@ -14,8 +14,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from feature_extractor.core.errors import ExtractionError
-from feature_extractor.core.models import PackageVersionSnapshot
+from depbee_analyzer.core.errors import ExtractionError
+from depbee_analyzer.core.models import PackageVersionSnapshot
 
 #: 분석 대상 확장자. npm 배포 산출물에서 실제로 실행되는 JS 계열만 본다.
 #: (.ts 등 소스는 배포본에 포함되더라도 실행되는 산출물이 아니므로 현재는 제외한다.)

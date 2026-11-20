@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from feature_extractor.core.models import PackageVersionSnapshot
-from feature_extractor.core.source_files import SourceFile
-from feature_extractor.extractors import EXTRACTOR_REGISTRY
-from feature_extractor.extractors.obfuscation import (
+from depbee_analyzer.core.models import PackageVersionSnapshot
+from depbee_analyzer.core.source_files import SourceFile
+from depbee_analyzer.extractors import EXTRACTOR_REGISTRY
+from depbee_analyzer.extractors.obfuscation import (
     METRICS,
     ObfuscationExtractor,
     aggregate,

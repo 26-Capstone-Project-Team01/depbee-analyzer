@@ -3,8 +3,8 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from feature_extractor.core.models import FeatureRow
-from feature_extractor.core.output import (
+from depbee_analyzer.core.models import FeatureRow
+from depbee_analyzer.core.output import (
     ERRORS_CSV_HEADER,
     append_error,
     prepare_outputs,

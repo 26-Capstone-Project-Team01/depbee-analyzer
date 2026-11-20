@@ -14,9 +14,9 @@
 설치 훅 또는 CI에서 유출·삭제 경로가 보이는 규칙도 **코드 근거**이며 실행 성공이나 침해 경위를 확정하지 않는다. `R_download_exec`, 인증 교체, 난독화는 적중해도 자동 악성 판정에 사용하지 않는다. 검사한 정상→정상 업데이트 140쌍에서는 적중 0건이었지만 오탐이 불가능하다는 뜻은 아니다. 공개 악성 표기 쌍의 평가는 선택된 파일 범위였으므로 미적중을 안전 판정으로 쓰지 않는다.
 
 ```bash
-python -m feature_extractor.rules.diff_scan \
+python -m depbee_analyzer.rules.diff_scan \
   --normal-dir /path/to/old/package \
   --target-dir /path/to/new/package
 ```
 
-Python에서는 `from feature_extractor.rules.diff_scan import scan_pair, scan_pair_dirs`로 호출한다. `scan_pair`는 상대경로→bytes 맵 두 개를 받고, `scan_pair_dirs`는 두 추출 디렉터리를 받는다. 입력 tarball의 출처·해시 검증과 안전한 추출은 호출 측에서 수행한다. 파일 누락이나 다른 패키지명은 `unknown`으로 표시하며, 이를 음성 판정으로 바꾸지 않는다.
+Python에서는 `from depbee_analyzer.rules.diff_scan import scan_pair, scan_pair_dirs`로 호출한다. `scan_pair`는 상대경로→bytes 맵 두 개를 받고, `scan_pair_dirs`는 두 추출 디렉터리를 받는다. 입력 tarball의 출처·해시 검증과 안전한 추출은 호출 측에서 수행한다. 파일 누락이나 다른 패키지명은 `unknown`으로 표시하며, 이를 음성 판정으로 바꾸지 않는다.

@@ -9,11 +9,11 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
-from feature_extractor.core.errors import LoaderError
-from feature_extractor.core.loader import build_snapshot, fetch_packument
-from feature_extractor.core.pipeline import build_row
-from feature_extractor.core.sources import RegistrySnapshotSource
-from feature_extractor.extractors.base import BaseExtractor
+from depbee_analyzer.core.errors import LoaderError
+from depbee_analyzer.core.loader import build_snapshot, fetch_packument
+from depbee_analyzer.core.pipeline import build_row
+from depbee_analyzer.core.sources import RegistrySnapshotSource
+from depbee_analyzer.extractors.base import BaseExtractor
 
 SAMPLE_PACKUMENT = {
     "name": "sample-pkg",
@@ -36,7 +36,7 @@ def _mock_response(json_data: dict, status_ok: bool = True) -> Mock:
     return response
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_fetch_packument_success(mock_get: Mock) -> None:
     mock_get.return_value = _mock_response(SAMPLE_PACKUMENT)
 
@@ -47,7 +47,7 @@ def test_fetch_packument_success(mock_get: Mock) -> None:
     assert "sample-pkg" in mock_get.call_args.args[0]
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_fetch_packument_http_error_raises_loader_error(mock_get: Mock) -> None:
     mock_get.return_value = _mock_response({}, status_ok=False)
 
@@ -55,7 +55,7 @@ def test_fetch_packument_http_error_raises_loader_error(mock_get: Mock) -> None:
         fetch_packument("sample-pkg")
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_fetch_packument_network_error_raises_loader_error(mock_get: Mock) -> None:
     mock_get.side_effect = requests.ConnectionError("no network")
 
@@ -119,7 +119,7 @@ def _mock_tarball_response(tarball: bytes) -> Mock:
     return response
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_build_snapshot_with_source_strips_the_tarball_top_level_dir(mock_get: Mock, tmp_path: Path) -> None:
     """source_dir은 압축 해제 루트가 아니라 package.json이 있는 패키지 루트여야 한다.
 
@@ -143,7 +143,7 @@ def test_build_snapshot_with_source_strips_the_tarball_top_level_dir(mock_get: M
     assert snapshot.source_dir.name == "package"
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_build_snapshot_with_source_accepts_non_package_top_level_dir(mock_get: Mock, tmp_path: Path) -> None:
     """최상위 디렉터리 이름이 "package"가 아닌 tarball도 패키지 루트를 찾아야 한다."""
     mock_get.return_value = _mock_tarball_response(
@@ -161,7 +161,7 @@ def test_build_snapshot_with_source_accepts_non_package_top_level_dir(mock_get: 
     assert (snapshot.source_dir / "package.json").is_file()
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_build_snapshot_with_source_without_package_json_raises_loader_error(mock_get: Mock, tmp_path: Path) -> None:
     mock_get.return_value = _mock_tarball_response(_tarball_bytes({"docs/readme.md": b"hi"}))
 
@@ -169,7 +169,7 @@ def test_build_snapshot_with_source_without_package_json_raises_loader_error(moc
         build_snapshot(TARBALL_PACKUMENT, "sample-pkg", "1.0.0", include_source=True, source_parent_dir=tmp_path)
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_build_snapshot_with_source_missing_tarball_url_raises_loader_error(mock_get: Mock, tmp_path: Path) -> None:
     packument = {
         "versions": {"1.0.0": {"name": "sample-pkg", "version": "1.0.0"}},
@@ -182,7 +182,7 @@ def test_build_snapshot_with_source_missing_tarball_url_raises_loader_error(mock
     mock_get.assert_not_called()
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_build_snapshot_with_source_download_failure_raises_loader_error(mock_get: Mock, tmp_path: Path) -> None:
     mock_get.side_effect = requests.ConnectionError("no network")
 
@@ -190,7 +190,7 @@ def test_build_snapshot_with_source_download_failure_raises_loader_error(mock_ge
         build_snapshot(TARBALL_PACKUMENT, "sample-pkg", "1.0.0", include_source=True, source_parent_dir=tmp_path)
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_build_snapshot_with_source_corrupt_tarball_raises_loader_error(mock_get: Mock, tmp_path: Path) -> None:
     mock_get.return_value = _mock_tarball_response(b"not a gzip tarball")
 
@@ -198,7 +198,7 @@ def test_build_snapshot_with_source_corrupt_tarball_raises_loader_error(mock_get
         build_snapshot(TARBALL_PACKUMENT, "sample-pkg", "1.0.0", include_source=True, source_parent_dir=tmp_path)
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_build_snapshot_with_source_os_error_during_extraction_raises_loader_error(
     mock_get: Mock, tmp_path: Path
 ) -> None:
@@ -209,12 +209,12 @@ def test_build_snapshot_with_source_os_error_during_extraction_raises_loader_err
     """
     mock_get.return_value = _mock_tarball_response(_tarball_bytes(_SAMPLE_TARBALL))
 
-    with patch("feature_extractor.core.loader.tarfile.TarFile.extractall", side_effect=OSError(123, "bad name")):
+    with patch("depbee_analyzer.core.loader.tarfile.TarFile.extractall", side_effect=OSError(123, "bad name")):
         with pytest.raises(LoaderError):
             build_snapshot(TARBALL_PACKUMENT, "sample-pkg", "1.0.0", include_source=True, source_parent_dir=tmp_path)
 
 
-@patch("feature_extractor.core.loader.requests.get")
+@patch("depbee_analyzer.core.loader.requests.get")
 def test_build_snapshot_without_source_does_not_download_tarball(mock_get: Mock) -> None:
     snapshot = build_snapshot(TARBALL_PACKUMENT, "sample-pkg", "1.0.0")
 
@@ -242,8 +242,8 @@ _SAMPLE_TARBALL = {
 }
 
 
-@patch("feature_extractor.core.loader.requests.get")
-@patch("feature_extractor.core.sources.fetch_packument")
+@patch("depbee_analyzer.core.loader.requests.get")
+@patch("depbee_analyzer.core.sources.fetch_packument")
 def test_registry_source_close_removes_extracted_sources(mock_fetch: Mock, mock_get: Mock) -> None:
     mock_fetch.return_value = _two_version_packument()
     mock_get.return_value = _mock_tarball_response(_tarball_bytes(_SAMPLE_TARBALL))
@@ -276,8 +276,8 @@ class _RecordSourceDirExtractor(BaseExtractor):
         return {"recorded": True}
 
 
-@patch("feature_extractor.core.loader.requests.get")
-@patch("feature_extractor.core.sources.fetch_packument")
+@patch("depbee_analyzer.core.loader.requests.get")
+@patch("depbee_analyzer.core.sources.fetch_packument")
 def test_build_row_removes_downloaded_sources_after_extraction(mock_fetch: Mock, mock_get: Mock) -> None:
     """batch 실행에서 pair마다 받은 tarball이 임시 디렉터리에 쌓이면 안 된다."""
     mock_fetch.return_value = _two_version_packument()
@@ -290,8 +290,8 @@ def test_build_row_removes_downloaded_sources_after_extraction(mock_fetch: Mock,
     assert not any(p.exists() for p in extractor.seen)
 
 
-@patch("feature_extractor.core.loader.requests.get")
-@patch("feature_extractor.core.sources.fetch_packument")
+@patch("depbee_analyzer.core.loader.requests.get")
+@patch("depbee_analyzer.core.sources.fetch_packument")
 def test_build_row_removes_downloaded_sources_even_when_extraction_fails(mock_fetch: Mock, mock_get: Mock) -> None:
     mock_fetch.return_value = _two_version_packument()
     mock_get.return_value = _mock_tarball_response(_tarball_bytes(_SAMPLE_TARBALL))

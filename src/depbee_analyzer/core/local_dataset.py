@@ -4,13 +4,13 @@ import json
 from pathlib import Path
 from typing import Any, Iterator
 
-from feature_extractor.core.errors import FeatureExtractorError
-from feature_extractor.core.loader import fetch_packument
-from feature_extractor.core.models import FeatureRow
-from feature_extractor.core.output import append_error, prepare_outputs, write_dataset
-from feature_extractor.core.pipeline import build_row
-from feature_extractor.core.sources import LocalArchiveSnapshotSource
-from feature_extractor.extractors.base import BaseExtractor
+from depbee_analyzer.core.errors import FeatureExtractorError
+from depbee_analyzer.core.loader import fetch_packument
+from depbee_analyzer.core.models import FeatureRow
+from depbee_analyzer.core.output import append_error, prepare_outputs, write_dataset
+from depbee_analyzer.core.pipeline import build_row
+from depbee_analyzer.core.sources import LocalArchiveSnapshotSource
+from depbee_analyzer.extractors.base import BaseExtractor
 
 #: npm-malware-package-pairs는 실제 악성 업데이트 사례만 모은 저장소이므로 label은 고정값이다.
 #: iter_pair_dirs가 정상->악성 pair로 읽을 수 있는 항목(status="ok"이고 normal_version과 악성 버전이
