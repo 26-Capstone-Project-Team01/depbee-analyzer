@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+from importlib.metadata import distribution
 from pathlib import Path
 
 import pytest
 
 from depbee_analyzer.cli import EXIT_INVALID_INPUT, main
+
+
+def test_installed_console_entry_opens_depbee_analyzer_help(capsys: pytest.CaptureFixture[str]) -> None:
+    entries = distribution("depbee-analyzer").entry_points.select(group="console_scripts", name="depbee-analyzer")
+    (entry,) = entries
+    assert entry.load() is main
+    with pytest.raises(SystemExit) as result:
+        main(["--help"])
+    assert result.value.code == 0
+    assert "depbee-analyzer" in capsys.readouterr().out.splitlines()[0]
 
 
 def test_batch_with_missing_pairs_file_prints_one_line_error(

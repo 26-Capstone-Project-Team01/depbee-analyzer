@@ -4,7 +4,7 @@ npm package의 (old_version, new_version) pair로부터 LightGBM 학습용 featu
 
 > 이 repo의 CLI는 최종 사용자용이 아닙니다. 학습된 모델을 사용하는 최종 CLI/서비스는 별도 repo `depbee`에서 구현됩니다.
 
-배포명과 CLI는 `depbee-analyzer`, Python import는 `depbee_analyzer`입니다. 이전 커밋을 고정한 실험은 당시 환경의 `feature-extractor`와 `feature_extractor`를 사용합니다. 새 환경으로 옮길 때에는 설치 요구사항과 import를 함께 바꾸세요.
+배포명과 CLI는 `depbee-analyzer`, Python import는 `depbee_analyzer`입니다.
 
 ## 관련 repository
 
@@ -14,9 +14,17 @@ npm package의 (old_version, new_version) pair로부터 LightGBM 학습용 featu
 
 ## 설치
 
+새 checkout에서 가상 환경을 만들고 활성화한 뒤 저장소 루트에서 설치합니다.
+
 ```bash
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
+depbee-analyzer --help
+python -m depbee_analyzer.cli --help
 ```
+
+기존 편집 설치 환경을 그대로 옮길 때는 그 환경에서 `python -m pip uninstall feature-extractor`를 실행하고 이름이 변경된 커밋으로 checkout합니다. 이때 `src/feature_extractor/`에 캐시만 남았거나 `src/feature_extractor.egg-info/`에 이전 설치 메타데이터가 남았다면 사용자 파일이 없는지 확인한 뒤 해당 생성물만 정리하고 위 설치 명령을 실행하세요. 호출하는 코드의 import도 `depbee_analyzer`로 바꿉니다.
+
+기존 실험을 재현할 때는 기록된 전체 커밋 SHA를 별도 checkout과 가상 환경에 고정하세요. 예를 들어 `c24761d`에서는 배포명·콘솔이 `feature-extractor`이고 모듈은 `feature_extractor.cli`입니다. `a83cc4b`부터 새 이름을 사용합니다. 두 커밋의 배포 버전은 모두 `0.1.0`이므로 실험 기록에는 버전과 SHA를 함께 남깁니다.
 
 ## 사용법
 
