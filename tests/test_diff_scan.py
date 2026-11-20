@@ -1,6 +1,6 @@
 import json
 
-from feature_extractor.rules.diff_scan import scan_pair
+from depbee_analyzer.rules.diff_scan import scan_pair
 
 
 def package(name: str, version: str, script: str) -> dict[str, bytes]:

@@ -4,10 +4,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from feature_extractor.core.errors import FeatureExtractorError
-from feature_extractor.core.local_dataset import run_local_archive_batch
-from feature_extractor.core.manifest import run_manifest_batch
-from feature_extractor.core.pipeline import build_row, resolve_extractors, run_batch
+from depbee_analyzer.core.errors import FeatureExtractorError
+from depbee_analyzer.core.local_dataset import run_local_archive_batch
+from depbee_analyzer.core.manifest import run_manifest_batch
+from depbee_analyzer.core.pipeline import build_row, resolve_extractors, run_batch
 
 
 #: batch 명령의 입력·출력 경로 문제로 발생하는 예외. 파일이 없거나(FileNotFoundError),
@@ -40,7 +40,7 @@ def _add_extractors_argument(parser: argparse.ArgumentParser) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="feature-extractor",
+        prog="depbee-analyzer",
         description=(
             "npm package.json / obfuscation feature 추출 도구. "
             "개발·dataset 생성용이며 최종 사용자 CLI는 depbee repo에 있다."

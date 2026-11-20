@@ -20,13 +20,13 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from feature_extractor.core.errors import FeatureExtractorError
-from feature_extractor.core.loader import fetch_packument
-from feature_extractor.core.models import FeatureRow
-from feature_extractor.core.output import append_error, prepare_outputs, write_dataset
-from feature_extractor.core.pipeline import build_row
-from feature_extractor.core.sources import LocalArchiveSnapshotSource, RegistrySnapshotSource, SnapshotSource
-from feature_extractor.extractors.base import BaseExtractor
+from depbee_analyzer.core.errors import FeatureExtractorError
+from depbee_analyzer.core.loader import fetch_packument
+from depbee_analyzer.core.models import FeatureRow
+from depbee_analyzer.core.output import append_error, prepare_outputs, write_dataset
+from depbee_analyzer.core.pipeline import build_row
+from depbee_analyzer.core.sources import LocalArchiveSnapshotSource, RegistrySnapshotSource, SnapshotSource
+from depbee_analyzer.extractors.base import BaseExtractor
 
 REQUIRED_COLUMNS = ("package", "old_version", "new_version", "label", "old_source", "new_source")
 REGISTRY = "registry"

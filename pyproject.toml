@@ -1,5 +1,5 @@
 [project]
-name = "feature-extractor"
+name = "depbee-analyzer"
 version = "0.1.0"
 description = "npm package update pair로부터 feature를 추출해 dataset을 만드는 개발용 도구 (최종 사용자 CLI 아님)"
 requires-python = ">=3.10"
@@ -14,7 +14,7 @@ dev = [
 ]
 
 [project.scripts]
-feature-extractor = "feature_extractor.cli:main"
+depbee-analyzer = "depbee_analyzer.cli:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

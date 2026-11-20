@@ -6,9 +6,9 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from feature_extractor.core.errors import LoaderError
-from feature_extractor.core.loader import build_snapshot, fetch_packument, get_publish_time
-from feature_extractor.core.models import PackageVersionSnapshot
+from depbee_analyzer.core.errors import LoaderError
+from depbee_analyzer.core.loader import build_snapshot, fetch_packument, get_publish_time
+from depbee_analyzer.core.models import PackageVersionSnapshot
 
 
 class SnapshotSource(ABC):

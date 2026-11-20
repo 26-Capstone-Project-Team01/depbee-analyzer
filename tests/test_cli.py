@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from feature_extractor.cli import EXIT_INVALID_INPUT, main
+from depbee_analyzer.cli import EXIT_INVALID_INPUT, main
 
 
 def test_batch_with_missing_pairs_file_prints_one_line_error(

@@ -9,8 +9,8 @@ from typing import Any
 
 import requests
 
-from feature_extractor.core.errors import LoaderError
-from feature_extractor.core.models import PackageVersionSnapshot
+from depbee_analyzer.core.errors import LoaderError
+from depbee_analyzer.core.models import PackageVersionSnapshot
 
 REGISTRY_BASE_URL = "https://registry.npmjs.org"
 REQUEST_TIMEOUT_SECONDS = 30

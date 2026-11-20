@@ -4,9 +4,9 @@ from typing import Any
 
 import semver
 
-from feature_extractor.core.errors import ExtractionError
-from feature_extractor.core.models import PackageVersionSnapshot
-from feature_extractor.extractors.base import BaseExtractor
+from depbee_analyzer.core.errors import ExtractionError
+from depbee_analyzer.core.models import PackageVersionSnapshot
+from depbee_analyzer.extractors.base import BaseExtractor
 
 #: npm lifecycle install 관련 훅 전체 (공급망 공격 탐지 맥락에서 흔히 쓰이는 진입점).
 INSTALL_SCRIPT_KEYS = ("preinstall", "install", "postinstall")

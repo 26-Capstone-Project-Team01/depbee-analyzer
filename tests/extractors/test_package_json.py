@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from feature_extractor.core.errors import ExtractionError
-from feature_extractor.core.models import PackageVersionSnapshot
-from feature_extractor.extractors.package_json import PackageJsonExtractor
+from depbee_analyzer.core.errors import ExtractionError
+from depbee_analyzer.core.models import PackageVersionSnapshot
+from depbee_analyzer.extractors.package_json import PackageJsonExtractor
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "package_json"
 

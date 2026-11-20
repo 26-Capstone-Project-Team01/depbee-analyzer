@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from feature_extractor.core.errors import ExtractionError
-from feature_extractor.core.models import PackageVersionSnapshot
-from feature_extractor.core.source_files import MAX_FILE_BYTES, collect_source_files
+from depbee_analyzer.core.errors import ExtractionError
+from depbee_analyzer.core.models import PackageVersionSnapshot
+from depbee_analyzer.core.source_files import MAX_FILE_BYTES, collect_source_files
 
 
 def _snapshot(source_dir: Path | None) -> PackageVersionSnapshot:

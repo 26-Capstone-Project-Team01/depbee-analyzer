@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from feature_extractor.core.local_dataset import iter_pair_dirs, run_local_archive_batch
-from feature_extractor.core.pipeline import resolve_extractors
+from depbee_analyzer.core.local_dataset import iter_pair_dirs, run_local_archive_batch
+from depbee_analyzer.core.pipeline import resolve_extractors
 
 
 def _write_package_json(base: Path, name: str, version: str, scripts: dict | None = None) -> None:
@@ -71,7 +71,7 @@ def test_iter_pair_dirs_skips_pairs_under_excluded_reason_dirs(tmp_path: Path) -
     assert packages == ["pkg-good"]
 
 
-@patch("feature_extractor.core.local_dataset.fetch_packument")
+@patch("depbee_analyzer.core.local_dataset.fetch_packument")
 def test_run_local_archive_batch_writes_dataset_and_excludes_invalid(mock_fetch_packument, tmp_path: Path) -> None:
     archive_root = tmp_path / "archive"
     _make_valid_pair(archive_root, "campaign-a", "pkg-good", "pkg-good")
@@ -99,7 +99,7 @@ def test_run_local_archive_batch_writes_dataset_and_excludes_invalid(mock_fetch_
     assert error_rows[0]["package"] == "pkg-bad"
 
 
-@patch("feature_extractor.core.local_dataset.fetch_packument")
+@patch("depbee_analyzer.core.local_dataset.fetch_packument")
 def test_run_local_archive_batch_respects_limit(mock_fetch_packument, tmp_path: Path) -> None:
     archive_root = tmp_path / "archive"
     for i in range(3):
@@ -126,7 +126,7 @@ def _read_dict_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-@patch("feature_extractor.core.local_dataset.fetch_packument")
+@patch("depbee_analyzer.core.local_dataset.fetch_packument")
 def test_full_run_after_limited_smoke_test_does_not_keep_its_errors(
     mock_fetch_packument, tmp_path: Path
 ) -> None:
@@ -166,7 +166,7 @@ def test_missing_archive_root_keeps_previous_outputs(tmp_path: Path) -> None:
 def test_archive_root_without_meta_json_keeps_previous_outputs(tmp_path: Path) -> None:
     """archive의 상위 디렉터리처럼 pair가 하나도 없는 경로를 넣으면 이전 결과를 지우지 않는다."""
     not_an_archive = tmp_path / "capstone"
-    (not_an_archive / "feature-extractor" / "src").mkdir(parents=True)
+    (not_an_archive / "depbee-analyzer" / "src").mkdir(parents=True)
     output_csv = tmp_path / "dataset.csv"
     errors_csv = tmp_path / "dataset.errors.csv"
     output_csv.write_text("previous dataset\n", encoding="utf-8")

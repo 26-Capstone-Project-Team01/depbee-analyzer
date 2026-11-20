@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
-from feature_extractor.cli import EXIT_INVALID_INPUT, main
-from feature_extractor.core.manifest import read_manifest, run_manifest_batch
-from feature_extractor.core.models import PackageVersionSnapshot
-from feature_extractor.core.pipeline import resolve_extractors
+from depbee_analyzer.cli import EXIT_INVALID_INPUT, main
+from depbee_analyzer.core.manifest import read_manifest, run_manifest_batch
+from depbee_analyzer.core.models import PackageVersionSnapshot
+from depbee_analyzer.core.pipeline import resolve_extractors
 
 PACKUMENT = {
     "time": {
@@ -65,7 +65,7 @@ class _FakeRegistrySource:
         self.closed = True
 
 
-@patch("feature_extractor.core.manifest.fetch_packument", return_value=PACKUMENT)
+@patch("depbee_analyzer.core.manifest.fetch_packument", return_value=PACKUMENT)
 def test_archive_old_and_new(_fetch, tmp_path: Path) -> None:
     archive = tmp_path / "archive"
     _write_raw(archive / "camp" / "pkg" / "normal_raw", "pkg", "1.0.0")
@@ -85,8 +85,8 @@ def test_archive_old_and_new(_fetch, tmp_path: Path) -> None:
     assert _read(tmp_path / "err.csv") == []
 
 
-@patch("feature_extractor.core.manifest.RegistrySnapshotSource", _FakeRegistrySource)
-@patch("feature_extractor.core.manifest.fetch_packument", return_value=PACKUMENT)
+@patch("depbee_analyzer.core.manifest.RegistrySnapshotSource", _FakeRegistrySource)
+@patch("depbee_analyzer.core.manifest.fetch_packument", return_value=PACKUMENT)
 def test_registry_baseline_with_archive_malicious_version(_fetch, tmp_path: Path) -> None:
     """교체된 baseline(registry)과 archive의 악성 버전을 한 pair로 비교한다."""
     _FakeRegistrySource.instances.clear()
@@ -107,7 +107,7 @@ def test_registry_baseline_with_archive_malicious_version(_fetch, tmp_path: Path
     assert _FakeRegistrySource.instances[0].closed
 
 
-@patch("feature_extractor.core.manifest.fetch_packument", return_value=PACKUMENT)
+@patch("depbee_analyzer.core.manifest.fetch_packument", return_value=PACKUMENT)
 def test_pair_level_failure_goes_to_errors_and_batch_continues(_fetch, tmp_path: Path) -> None:
     archive = tmp_path / "archive"
     (archive / "camp" / "broken" / "malicious_raw").mkdir(parents=True)  # package.json 없음

@@ -1,6 +1,6 @@
 # 난독화 feature 설계와 평가
 
-`ObfuscationExtractor`(`src/feature_extractor/extractors/obfuscation.py`)의 feature 정의, 지표 선정 근거가 된 평가 결과, 남은 과제를 정리합니다.
+`ObfuscationExtractor`(`src/depbee_analyzer/extractors/obfuscation.py`)의 feature 정의, 지표 선정 근거가 된 평가 결과, 남은 과제를 정리합니다.
 구현과 registry 등록은 끝났습니다. 아래 "구현된 feature" 절이 현재 코드의 기준입니다.
 
 ## 범위

@@ -8,11 +8,11 @@ from unittest.mock import patch
 
 import pytest
 
-from feature_extractor.core.errors import FeatureExtractorError
-from feature_extractor.core.models import PackageVersionSnapshot
-from feature_extractor.core.pipeline import build_row, resolve_extractors, run_batch
-from feature_extractor.core.sources import SnapshotSource
-from feature_extractor.extractors.base import BaseExtractor
+from depbee_analyzer.core.errors import FeatureExtractorError
+from depbee_analyzer.core.models import PackageVersionSnapshot
+from depbee_analyzer.core.pipeline import build_row, resolve_extractors, run_batch
+from depbee_analyzer.core.sources import SnapshotSource
+from depbee_analyzer.extractors.base import BaseExtractor
 
 PACKUMENT = {
     "versions": {
@@ -40,7 +40,7 @@ def test_resolve_extractors_unknown_name_raises_value_error() -> None:
         resolve_extractors(["does_not_exist"])
 
 
-@patch("feature_extractor.core.sources.fetch_packument")
+@patch("depbee_analyzer.core.sources.fetch_packument")
 def test_build_row_merges_extractor_output_with_label(mock_fetch_packument) -> None:
     mock_fetch_packument.return_value = PACKUMENT
     extractors = resolve_extractors(["package_json"])
@@ -76,7 +76,7 @@ def test_build_row_raises_on_duplicate_feature_names() -> None:
         ) -> dict[str, Any]:
             return {"shared_key": 2}
 
-    with patch("feature_extractor.core.sources.fetch_packument", return_value=PACKUMENT):
+    with patch("depbee_analyzer.core.sources.fetch_packument", return_value=PACKUMENT):
         with pytest.raises(FeatureExtractorError):
             build_row(
                 "sample-pkg",
@@ -151,7 +151,7 @@ def test_build_row_requests_source_only_when_an_extractor_declares_it() -> None:
     assert with_source.include_source_calls == [True, True]
 
 
-@patch("feature_extractor.core.sources.fetch_packument")
+@patch("depbee_analyzer.core.sources.fetch_packument")
 def test_run_batch_writes_dataset_and_records_errors(mock_fetch_packument, tmp_path: Path) -> None:
     mock_fetch_packument.return_value = PACKUMENT
 
@@ -185,7 +185,7 @@ def _read_dict_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-@patch("feature_extractor.core.sources.fetch_packument")
+@patch("depbee_analyzer.core.sources.fetch_packument")
 def test_run_batch_rerun_to_same_paths_does_not_accumulate_errors(
     mock_fetch_packument, tmp_path: Path
 ) -> None:
@@ -209,7 +209,7 @@ def test_run_batch_rerun_to_same_paths_does_not_accumulate_errors(
     assert len(_read_dict_rows(errors_csv)) == 1
 
 
-@patch("feature_extractor.core.sources.fetch_packument")
+@patch("depbee_analyzer.core.sources.fetch_packument")
 def test_run_batch_where_every_pair_fails_clears_previous_dataset(
     mock_fetch_packument, tmp_path: Path
 ) -> None:
