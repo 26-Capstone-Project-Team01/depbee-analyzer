@@ -8,7 +8,7 @@ from depbee_analyzer.core.errors import FeatureExtractorError
 from depbee_analyzer.core.models import FeatureRow
 from depbee_analyzer.core.output import append_error, prepare_outputs, write_dataset
 from depbee_analyzer.core.sources import RegistrySnapshotSource, SnapshotSource
-from depbee_analyzer.extractors import EXTRACTOR_REGISTRY
+from depbee_analyzer.extractors import EXTRACTOR_REGISTRY, OPTIONAL_EXTRACTOR_REGISTRY
 from depbee_analyzer.extractors.base import BaseExtractor
 
 
@@ -18,12 +18,14 @@ def resolve_extractors(names: Iterable[str] | None) -> list[BaseExtractor]:
     names가 없으면(None) 등록된 전체 extractor를 기본으로 실행한다.
     특정 이름을 고르면 그 extractor의 feature만 담긴 dataset이 나온다. extractor별로
     CSV를 따로 두거나, 소스 다운로드가 필요 없는 extractor만 돌릴 때 쓴다.
+    OPTIONAL_EXTRACTOR_REGISTRY의 extractor(예: code_context)는 이름으로 지정할 때만 실행된다.
     """
     selected_names = list(names) if names else list(EXTRACTOR_REGISTRY)
+    available = {**EXTRACTOR_REGISTRY, **OPTIONAL_EXTRACTOR_REGISTRY}
     try:
-        return [EXTRACTOR_REGISTRY[name]() for name in selected_names]
+        return [available[name]() for name in selected_names]
     except KeyError as exc:
-        known = ", ".join(sorted(EXTRACTOR_REGISTRY))
+        known = ", ".join(sorted(available))
         raise ValueError(f"unknown extractor {exc.args[0]!r}; known extractors: {known}") from exc
 
 

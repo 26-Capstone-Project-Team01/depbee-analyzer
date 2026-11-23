@@ -72,6 +72,7 @@ extractor별 CSV를 합칠 때는 `package,old_version,new_version`으로 join�
 | --- | --- |
 | `package_json` | 구현 완료, registry 등록됨 |
 | `obfuscation` | 구현 완료, registry 등록됨. 난독화 지표 7개를 새 버전 전체(`...New`), 이전 대비 변화(`...Change`), 변경된 코드(`...ChangedCode`) 세 가지로 냅니다(`obf` 접두어, 22개 컬럼). 지표 선정 근거와 평가는 [docs/obfuscation-features.md](docs/obfuscation-features.md) 참고 |
+| `code_context` | 실험용(X1). **기본 실행에 포함되지 않으며** `--extractors package_json,obfuscation,code_context`처럼 이름으로 지정해야 실행됩니다(`OPTIONAL_EXTRACTOR_REGISTRY`). 설치 훅 3개·변경 JS 호출 2개, 5개 컬럼. 정의와 결측 규칙은 [docs/x1-code-context-features.md](docs/x1-code-context-features.md) 참고 |
 
 ## 새 extractor 추가하기
 

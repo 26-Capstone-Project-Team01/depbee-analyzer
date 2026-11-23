@@ -33,7 +33,8 @@ def _add_extractors_argument(parser: argparse.ArgumentParser) -> None:
         help=(
             "쉼표로 구분된 extractor 이름 목록. 생략하면 등록된 모든 extractor를 실행한다. "
             "extractor별로 dataset을 따로 만들 때(예: obfuscation), 소스 다운로드가 필요 없는 "
-            "extractor만 돌릴 때(예: package_json), 디버깅할 때 쓴다"
+            "extractor만 돌릴 때(예: package_json), 디버깅할 때 쓴다. "
+            "실험용 code_context(X1)는 기본 실행에 포함되지 않으므로 이름으로 지정해야 한다"
         ),
     )
 
