@@ -59,16 +59,25 @@ FEATURE_NAMES = HOOK_FEATURE_NAMES + (
 _CONTROL = frozenset({"&&", "||", ";", "|", "&", ";;", "|&", "(", ")"})
 #: 다음 토큰을 파일 이름으로 받는 리디렉션 연산자(그 토큰은 실행 프로그램이 아니다).
 _REDIRECT = frozenset({">", ">>", "<", "<<", "<<<", ">&", "<&", "&>", ">|"})
-#: 실행 프로그램 앞에 붙어 뒤 명령을 실행하는 래퍼.
-_WRAPPERS = frozenset({"env", "exec", "command", "nohup"})
+#: 실행 프로그램 앞에 붙어 뒤 명령을 실행하는 래퍼(래퍼 자신은 실행 프로그램으로 세지 않는다).
+_WRAPPERS = frozenset({"env", "exec", "command", "nohup", "sudo", "doas", "time"})
+#: 값을 하나 받는 래퍼 옵션(`sudo -u root node x`의 root는 프로그램이 아니다).
+_WRAPPER_VALUE_OPTIONS = frozenset({"-u", "-g", "-p", "-C", "-D", "-h", "-r", "-t", "-U"})
+#: 다른 프로그램을 실행하지 않는 셸 내장 명령(프로그램·실행 대상에서 뺀다).
+_BUILTINS = frozenset({"true", "false", ":", "exit", "cd", "export", "set", "unset"})
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+#: 명령 위치에 단독으로 온 환경 변수(`$NODE`, `${npm_node_execpath}`): 인터프리터로 본다.
+_VARIABLE = re.compile(r"^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$")
 #: 인자로 받은 파일을 실행하는 인터프리터.
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
 _INTERPRETERS = _SHELLS | frozenset(
     {"node", "nodejs", "python", "python3", "bun", "deno", "ts-node", "tsx", "perl", "ruby"}
 )
 #: 파일 대신 인라인 코드를 받는 옵션(이 경우 참조 파일이 없다).
-_INLINE_FLAGS = frozenset({"-e", "--eval", "-p", "--print", "-c", "-i"})
+#: `node --run <script>`은 package.json 스크립트 이름을 받으므로 파일 참조가 아니다.
+_INLINE_FLAGS = frozenset({"-e", "--eval", "-p", "--print", "-c", "-i", "--run"})
+#: `bun run <file>`, `deno run <file>`처럼 하위 명령 뒤에 파일을 받는 인터프리터.
+_RUN_SUBCOMMAND = frozenset({"bun", "deno"})
 _NODE_LIKE = frozenset({"node", "nodejs", "bun", "ts-node", "tsx"})
 _SCRIPT_SUFFIXES = (".js", ".cjs", ".mjs", ".sh", ".py", ".ts")
 
@@ -137,9 +146,8 @@ def _split_commands(command: str, _depth: int = 0) -> list[_Command]:
 
     result: list[_Command] = []
     for segment, previous_op, redirect_outputs in raw:
-        while segment and (_ASSIGNMENT.match(segment[0]) or segment[0] in _WRAPPERS):
-            segment = segment[1:]
-        if not segment:
+        segment = _strip_prefixes(segment)
+        if not segment or segment[0] in _BUILTINS:
             continue
         result.append((segment, previous_op, redirect_outputs))
         program = PurePosixPath(segment[0]).name
@@ -148,6 +156,20 @@ def _split_commands(command: str, _depth: int = 0) -> list[_Command]:
             if index + 1 < len(segment):
                 result.extend(_split_commands(segment[index + 1], _depth + 1))
     return result
+
+
+def _strip_prefixes(segment: list[str]) -> list[str]:
+    """앞의 환경 변수 대입과 래퍼(및 래퍼 옵션)를 뺀다."""
+    while segment:
+        if _ASSIGNMENT.match(segment[0]):
+            segment = segment[1:]
+        elif segment[0] in _WRAPPERS:
+            segment = segment[1:]
+            while segment and segment[0].startswith("-"):
+                segment = segment[2:] if segment[0] in _WRAPPER_VALUE_OPTIONS else segment[1:]
+        else:
+            break
+    return segment
 
 
 def command_segments(command: str) -> list[list[str]]:
@@ -182,7 +204,10 @@ def _external_target(ref: str, downloaded: set[str]) -> str | None:
     normalized = posixpath.normpath(ref)
     if normalized in downloaded:
         return f"download:{normalized}"
-    if ref.startswith(("/", "~", "$")) or normalized == ".." or normalized.startswith("../"):
+    # `$VAR/x`는 패키지 밖 위치로 본다. `$SCRIPT`처럼 변수 하나뿐이면 위치를 알 수 없으므로 외부로 단정하지 않는다
+    # (내부 실행 대상으로 남아 installHookRefFileChanged가 해석 불가 → None).
+    if ref.startswith(("/", "~")) or (ref.startswith("$") and "/" in ref) \
+            or normalized == ".." or normalized.startswith("../"):
         return f"path:{normalized}"
     return None
 
@@ -223,18 +248,25 @@ def _referenced_paths(segment: list[str]) -> list[tuple[str, bool]]:
     """단순 명령 하나가 직접 실행하는 파일 경로. (경로, node 방식 확장자 보완 여부)."""
     head = segment[0]
     program = PurePosixPath(head).name
+    variable_program = bool(_VARIABLE.match(head))  # `$NODE lint.js`: 변수는 인터프리터(외부 경로 아님)
     refs: list[tuple[str, bool]] = []
-    if program not in _INTERPRETERS and (
+    if program not in _INTERPRETERS and not variable_program and (
         head.startswith(("./", "../", "/", "~/", "$")) or head.endswith(_SCRIPT_SUFFIXES)
     ):
         refs.append((head, False))
-    if program in _INTERPRETERS:
+    if program in _INTERPRETERS or variable_program:
+        expect_run_target = False
         for arg in segment[1:]:
             if arg in _INLINE_FLAGS:
-                break  # 인라인 코드: 참조 파일 없음(셸 -c는 command_segments가 펼친다)
+                break  # 인라인 코드·스크립트 이름: 참조 파일 없음(셸 -c는 command_segments가 펼친다)
             if arg.startswith("-"):
                 continue
-            refs.append((arg, program in _NODE_LIKE))
+            if not expect_run_target and arg == "run" and (program in _RUN_SUBCOMMAND or variable_program):
+                expect_run_target = True  # `bun run x.js`, `deno run x.ts`, `$npm_execpath run build`
+                continue
+            if expect_run_target and not ("/" in arg or arg.endswith(_SCRIPT_SUFFIXES)):
+                break  # `bun run build`: package.json 스크립트 이름이지 파일이 아니다
+            refs.append((arg, program in _NODE_LIKE or variable_program))
             break
     return refs
 
@@ -457,14 +489,33 @@ def lex_js(text: str) -> tuple[str, list[str]]:
 
 
 _ID = r"[A-Za-z_$][\w$]*"
-_REQ = r"(?:__)?require\s*\(\s*__S(\d+)__\s*\)"
-_ALIAS_REQUIRE = re.compile(rf"(?<![\w$.])({_ID})\s*=\s*{_REQ}")
-_DESTRUCT_REQUIRE = re.compile(rf"\{{([^{{}}]*)\}}\s*=\s*{_REQ}")
+#: 모듈 이름 인자: 문자열 리터럴 하나 또는 리터럴끼리만 `+`로 이은 것(`'chi' + 'ld_process'`). 변수가 섞이면 해석하지 않는다.
+_CONCAT = r"__S\d+__(?:\s*\+\s*__S\d+__)*"
+#: `const req = createRequire(import.meta.url)` / `module.createRequire(__filename)`로 만든 require 함수.
+#: 멤버 접근: `.name` 또는 리터럴(결합) 대괄호 `["na" + "me"]`. 변수 대괄호(`obj[key]`)는 해석하지 않는다.
+_MEMBER = rf"(?:\.\s*({_ID})|\[\s*({_CONCAT})\s*\])"
+_CREATE_REQUIRE_ALIAS = re.compile(rf"(?<![\w$.])({_ID})\s*=\s*(?:{_ID}\s*\.\s*)?createRequire\s*\(")
 _IMPORT_DEFAULT = re.compile(rf"\bimport\s+({_ID})\s*(?:,\s*\{{[^{{}}]*\}}\s*)?from\s*__S(\d+)__")
 _IMPORT_STAR = re.compile(rf"\bimport\s*\*\s*as\s+({_ID})\s+from\s*__S(\d+)__")
 _IMPORT_NAMED = re.compile(rf"\bimport\s*(?:{_ID}\s*,\s*)?\{{([^{{}}]*)\}}\s*from\s*__S(\d+)__")
-_DIRECT_MEMBER = re.compile(rf"{_REQ}\s*\.\s*({_ID})\s*\(")
-_DIRECT_CALL = re.compile(rf"{_REQ}\s*\(")
+
+
+class _RequirePatterns:
+    """파일 하나에서 require 역할을 하는 표현(require, __require, createRequire(...), 그 별칭) 기준 패턴."""
+
+    def __init__(self, code: str) -> None:
+        aliases = sorted({m.group(1) for m in _CREATE_REQUIRE_ALIAS.finditer(code)} - {"require", "__require"})
+        callee = r"(?:__)?require|(?:{_ID}\s*\.\s*)?createRequire\s*\([^()]*\)".replace("{_ID}", _ID)
+        if aliases:
+            callee += "|" + "|".join(rf"(?<![\w$.]){re.escape(a)}" for a in aliases)
+        req = rf"(?:{callee})\s*\(\s*({_CONCAT})\s*\)"
+        self.alias = re.compile(rf"(?<![\w$.])({_ID})\s*=\s*{req}(?!\s*[.(\[])")
+        self.destructure = re.compile(rf"\{{([^{{}}]*)\}}\s*=\s*{req}")
+        #: `x = require('child_process').spawn` (호출하지 않고 함수를 담음)
+        self.member_ref = re.compile(rf"(?<![\w$.])({_ID})\s*=\s*{req}\s*\.\s*({_ID})(?![\w$])(?!\s*\()")
+        #: `require('cp').spawn(` 또는 리터럴 대괄호 접근 `require('cp')["sp" + "awn"](`
+        self.direct_member = re.compile(rf"{req}\s*{_MEMBER}\s*\(")
+        self.direct_call = re.compile(rf"{req}\s*\(")
 
 #: 프로세스 실행 API.
 PROC_MODULES = {"child_process": frozenset({"exec", "execSync", "execFile", "execFileSync", "spawn", "spawnSync", "fork"})}
@@ -495,19 +546,38 @@ _GLOBAL_NET = [
 ]
 
 
-def _module(strings: list[str], index: str) -> str:
-    name = strings[int(index)]
+def _literal(strings: list[str], concat: str) -> str:
+    return "".join(strings[int(k)] for k in _PLACEHOLDER.findall(concat))
+
+
+def _member_name(strings: list[str], identifier: str | None, concat: str | None) -> str:
+    """`.name` 또는 리터럴 대괄호 접근 `["na" + "me"]`의 멤버 이름."""
+    return identifier if identifier else _literal(strings, concat or "")
+
+
+def _module(strings: list[str], ref: str) -> str:
+    """자리표시 번호 하나(`12`) 또는 리터럴 결합(`__S1__ + __S2__`)을 모듈 이름으로 바꾼다."""
+    name = strings[int(ref)] if ref.isdigit() else "".join(strings[int(k)] for k in _PLACEHOLDER.findall(ref))
     return name[5:] if name.startswith("node:") else name
 
 
-def _bindings(code: str, strings: list[str]) -> tuple[dict[str, str], dict[str, tuple[str, str]]]:
+def _bindings(
+    code: str, strings: list[str], req: _RequirePatterns
+) -> tuple[dict[str, str], dict[str, tuple[str, str]]]:
     """alias → 모듈, 직접 꺼낸 이름 → (모듈, 원래 export 이름)."""
     aliases: dict[str, str] = {}
     names: dict[str, tuple[str, str]] = {}
-    for pattern in (_ALIAS_REQUIRE, _IMPORT_DEFAULT, _IMPORT_STAR):
+    for pattern in (req.alias, _IMPORT_DEFAULT, _IMPORT_STAR):
         for m in pattern.finditer(code):
             aliases[m.group(1)] = _module(strings, m.group(2))
-    for pattern, separator in ((_DESTRUCT_REQUIRE, ":"), (_IMPORT_NAMED, " as ")):
+    for m in req.member_ref.finditer(code):
+        names[m.group(1)] = (_module(strings, m.group(2)), m.group(3))
+    for alias, module in list(aliases.items()):
+        # `const run = cp.spawn` (cp는 모듈 alias, 호출하지 않고 함수를 담음)
+        pattern = re.compile(rf"(?<![\w$.])({_ID})\s*=\s*{re.escape(alias)}\s*\.\s*({_ID})(?![\w$])(?!\s*\()")
+        for m in pattern.finditer(code):
+            names[m.group(1)] = (module, m.group(2))
+    for pattern, separator in ((req.destructure, ":"), (_IMPORT_NAMED, " as ")):
         for m in pattern.finditer(code):
             module = _module(strings, m.group(2))
             for item in m.group(1).split(","):
@@ -559,15 +629,17 @@ def call_signatures(text: str) -> tuple[Counter[CallSignature], Counter[CallSign
     API 이름은 별칭이 아니라 모듈과 export 이름으로 정규화한다(`cp.exec`와 `child_process.exec`가 같다).
     """
     code, strings = lex_js(text)
-    aliases, names = _bindings(code, strings)
+    req = _RequirePatterns(code)
+    aliases, names = _bindings(code, strings, req)
     proc: dict[int, tuple[str, int]] = {}
     net: dict[int, tuple[str, int]] = {}
 
     def member_calls(alias: str, module: str, methods: frozenset[str], into: dict) -> None:
-        pattern = re.compile(rf"(?<![\w$.]){re.escape(alias)}\s*\.\s*({_ID})\s*\(")
+        pattern = re.compile(rf"(?<![\w$.]){re.escape(alias)}\s*{_MEMBER}\s*\(")
         for m in pattern.finditer(code):
-            if m.group(1) in methods:
-                into[m.start()] = (f"{module}.{m.group(1)}", m.end())
+            method = _member_name(strings, m.group(1), m.group(2))
+            if method in methods:
+                into[m.start()] = (f"{module}.{method}", m.end())
 
     def bare_calls(name: str, api: str, into: dict) -> None:
         for m in re.finditer(rf"(?<![\w$.]){re.escape(name)}\s*\(", code):
@@ -588,8 +660,8 @@ def call_signatures(text: str) -> tuple[Counter[CallSignature], Counter[CallSign
             bare_calls(local, f"{module}.{exported}", net)
         elif module in NET_CALLABLE_LIBRARIES and exported in _LIBRARY_METHODS | {"default"}:
             bare_calls(local, module if exported == "default" else f"{module}.{exported}", net)
-    for m in _DIRECT_MEMBER.finditer(code):
-        module, method = _module(strings, m.group(1)), m.group(2)
+    for m in req.direct_member.finditer(code):
+        module, method = _module(strings, m.group(1)), _member_name(strings, m.group(2), m.group(3))
         api = (f"{module}.{method}", m.end())
         if module in PROC_MODULES and method in PROC_MODULES[module]:
             proc[m.start()] = api
@@ -597,7 +669,7 @@ def call_signatures(text: str) -> tuple[Counter[CallSignature], Counter[CallSign
             net[m.start()] = api
         elif module in NET_CALLABLE_LIBRARIES and method in _LIBRARY_METHODS:
             net[m.start()] = api
-    for m in _DIRECT_CALL.finditer(code):
+    for m in req.direct_call.finditer(code):
         module = _module(strings, m.group(1))
         if module in NET_CALLABLE_LIBRARIES:
             net[m.start()] = (module, m.end())

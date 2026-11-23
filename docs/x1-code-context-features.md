@@ -17,12 +17,22 @@ B 유형(새 의존성의 당시 버전 분석)은 별도 실험으로 남긴다
 | `installHookArgsChanged` | bool | 양쪽에 있는 같은 훅에서 명령 토큰은 다르고 실행 프로그램 구성(중복 포함)은 같음 | 위와 같음 |
 | `installHookRefFileChanged` | bool | new 훅이 직접 실행하는 **패키지 내부** 파일(`node x.js`, `sh x.sh`, `./x.sh`, node는 `x`→`x.js`/`x/index.js`)이 old에 없거나 내용이 다름. 외부 실행 대상은 이 값에 넣지 않는다 | 바뀐 내부 파일이 확인되지 않았고, 내부 실행 대상 중 하나라도 확인 불가(패키지에 없음, symlink, 크기 상한 초과, source 없음). 훅 해석 실패 |
 | `installHookNewExternalExecCount` | int ≥ 0 | new 훅의 **외부 실행 대상** 중 old 훅에 없던 것의 수(아래 정의) | 훅 해석 실패, `scripts` 형식 오류 |
+| `addedProcExecCallCount` | int ≥ 0 | **새로 생기거나 바뀐 호출 지점 수.** 추가·변경된 JS 파일마다 new의 호출 서명 multiset에서 old 같은 경로의 multiset을 뺀 개수의 합. 대상 API: `child_process`의 exec/execSync/execFile/execFileSync/spawn/spawnSync/fork | 소스 수집 실패(source 없음, 파일 수·크기 상한, 디렉터리 읽기 오류) |
+| `addedNetworkCallCount` | int ≥ 0 | 같은 방식. 대상 API: http/https(request·get), http2.connect, net(connect·createConnection·Socket), tls.connect, dgram.createSocket, dns 조회, HTTP 라이브러리(axios, node-fetch, got, undici, ws 등) 호출, 전역 `fetch(`, `new WebSocket/XMLHttpRequest/EventSource(`, `navigator.sendBeacon(` | 위와 같음 |
 
 **실행 대상**은 명령 위치의 경로(`./x`, `/x`, `~/x`, `$VAR/x`, 스크립트 확장자)와 인터프리터(node·sh·bash·python 등)의
 첫 파일 인자만이다. `cp /tmp/a b`, `node build.js /tmp/out`의 `/tmp/...`처럼 인자로만 쓰인 경로는 실행 대상이 아니다.
 
+명령 해석 규칙(D06 악성 20쌍·928쌍 검증 후 보완):
+- 래퍼 `env`, `exec`, `command`, `nohup`, `sudo`, `doas`, `time`과 그 옵션(`sudo -u root`의 값 포함)은 프로그램이 아니다.
+- 셸 내장 `true`, `false`, `:`, `exit`, `cd`, `export`, `set`, `unset`은 프로그램·실행 대상에서 뺀다(`node x.js || true`의 프로그램은 node 하나).
+- `bun run <file>`, `deno run [옵션] <file>`: `run` 다음 인자가 파일처럼 보이면(확장자 또는 `/`) 실행 대상이다.
+  `bun run build`처럼 package.json 스크립트 이름이면 파일 참조가 없다. `node --run <script>`도 파일 참조가 없다.
+- 명령 위치에 변수 하나만 있으면(`$NODE lint.js`, `${npm_node_execpath} x.js`) 인터프리터로 보고 첫 파일 인자를 실행 대상으로 본다.
+  변수 명령 자체는 외부 경로가 아니다. 실행 대상 자리에 변수 하나(`node $SCRIPT`)만 있으면 위치를 알 수 없어 내부 대상 해석 불가(None)다.
+
 **외부 실행 대상**(비교 키):
-- `path:` 절대 경로, `~`·`$VAR`로 시작하는 경로, `..`로 패키지 밖을 가리키는 경로
+- `path:` 절대 경로, `~`로 시작하는 경로, `$VAR/...`처럼 변수 뒤에 경로가 붙은 것, `..`로 패키지 밖을 가리키는 경로
 - `download:` 같은 훅에서 `curl -o/--output`, `wget -O/--output-document`, `>`·`>>` 리디렉션으로 내려받은 파일(상대 경로 포함)
 - `pipe:` 다운로더 출력을 인터프리터로 파이프(`curl ... | sh`)
 
@@ -31,8 +41,6 @@ old에도 같은 키가 있으면 세지 않는다(같은 외부 경로를 계�
 
 개선 전에는 외부 경로 실행이 `installHookRefFileChanged`를 None으로 만들어, "외부 경로를 실행한다"는 정보와
 "파일을 분석할 수 없다"는 상황이 같은 결측으로 섞였다.
-| `addedProcExecCallCount` | int ≥ 0 | **새로 생기거나 바뀐 호출 지점 수.** 추가·변경된 JS 파일마다 new의 호출 서명 multiset에서 old 같은 경로의 multiset을 뺀 개수의 합. 대상 API: `child_process`의 exec/execSync/execFile/execFileSync/spawn/spawnSync/fork | 소스 수집 실패(source 없음, 파일 수·크기 상한, 디렉터리 읽기 오류) |
-| `addedNetworkCallCount` | int ≥ 0 | 같은 방식. 대상 API: http/https(request·get), http2.connect, net(connect·createConnection·Socket), tls.connect, dgram.createSocket, dns 조회, HTTP 라이브러리(axios, node-fetch, got, undici, ws 등) 호출, 전역 `fetch(`, `new WebSocket/XMLHttpRequest/EventSource(`, `navigator.sendBeacon(` | 위와 같음 |
 
 **호출 서명** = (API 이름, 인자에 직접 적힌 문자열 리터럴들, 숫자 리터럴들). API 이름은 별칭이 아니라 모듈과 export 이름으로
 정규화한다(`cp.exec`와 `require('child_process').exec`는 같은 `child_process.exec`). 그래서
@@ -64,14 +72,34 @@ A 유형은 source가 없어도 계산된다(`installHookRefFileChanged`는 내�
   esbuild 0.19.11→0.19.12가 실행 인자의 자기 버전 문자열 때문에 proc 2로 잡혔기 때문이다. 다른 버전처럼 보이는 문자열은 그대로 비교한다.
 - `.exec(`·`.spawn(` 같은 이름만으로 세지 않고 `require('child_process')`/`import ... from 'child_process'`로 묶인 이름의 호출만 센다
   (`RegExp.prototype.exec` 오탐 방지).
+- 모듈 참조로 인정하는 형태(D06 악성 검증 후 보완, 리터럴에 한정):
+  - 문자열 리터럴끼리만 `+`로 이은 모듈 이름: `require('chi' + 'ld_pro' + 'cess')`. 변수가 섞이면(`'child_' + name`) 해석하지 않는다.
+  - `createRequire(...)`로 만든 함수와 그 별칭: `const req = createRequire(import.meta.url); req('child_process')`,
+    `createRequire(import.meta.url)('child_process')`, `module.createRequire(__filename)('https')`.
+  - 호출하지 않고 함수를 담은 변수: `var run = require('child_process').spawn; run(...)`, `const sp = cp.spawn; sp(...)`.
+  - 리터럴 대괄호 멤버 접근: `cp['execSync'](...)`, `require('cp')["sp" + "awn"](...)`. 변수 키(`cp[name]`)는 해석하지 않는다.
+  - `x = require('child_process').spawn('a')`처럼 호출 결과를 담은 변수는 모듈 별칭이 아니다(이전 구현은 별칭으로 잡을 수 있었다).
 - 주석, 문자열, 정규식 리터럴 안은 세지 않는다(`lex_js`). 템플릿 리터럴의 `${...}` 안 식은 코드로 본다.
 
 ### 정적 분석 한계
 
 - 셸: `$(...)` 명령 치환, 변수 확장, `node -e`의 인라인 코드는 해석하지 않는다. `sh/bash -c "..."`는 한 단계 펼친다.
   `2>&1`의 `2`처럼 일부 리디렉션 숫자가 인자로 남는다(프로그램 판정에는 영향 없음).
-- JS: 완전한 파서가 아니다. 동적 require(`require(name)`), `obj[method]()`, 재할당된 alias, `(cond ? https : http).request`
-  같은 간접 호출, 동적 `import()`는 세지 않는다. 지역 함수 이름이 `fetch`이면 전역 fetch로 센다. 통신 상대(localhost 포함)는 구분하지 않는다.
+- 셸: `cd dir && node x.js`의 작업 디렉터리 변경은 추적하지 않는다(x.js를 패키지 루트 기준으로 찾는다).
+- JS: 완전한 파서가 아니다. 동적 require(`require(name)`), 변수 키 대괄호(`obj[method]()`), 재할당된 alias, `(cond ? https : http).request`,
+  함수 인자로 넘긴 실행 함수(`wrap(execFileSync, ...)`), 난독화로 재사용되는 require 변수, webpack 모듈 번호(`n(5317).spawn`),
+  `eval`·`Function`으로 만든 코드, 동적 `import()`는 세지 않는다. 지역 함수 이름이 `fetch`이면 전역 fetch로 센다.
+  통신 상대(localhost 포함)는 구분하지 않는다.
+- 정상 코드에서도 정의대로 값이 커진다. 예: Hard benign `realm` 12.0.0-browser.2→11.10.1의 빌드 스크립트
+  `const exec = require("child_process").execFileSync; exec(...)`는 보완 후 실행 호출로 센다(1→4).
+
+### 이번 단계에서 넣지 않은 설계 후보: 원격 패키지 실행
+
+`npm install -g <pkg>`, `npm i <pkg>`, `npx <pkg>`, `bunx <pkg>`, `pnpm dlx <pkg>`, `yarn dlx <pkg>`는 설치 훅에서
+**레지스트리의 다른 패키지 코드를 내려받아 실행**하는 경로다(D06 예: `cline` 2.3.0의 `npm install -g openclaw@latest`).
+현재는 `installHookNewProgramCount`에서 프로그램(`npm`, `npx`)으로만 보이고 `installHookNewExternalExecCount`에는 넣지 않는다.
+넣으려면 정할 것: 대상 패키지 이름·버전 범위(`@latest`)를 비교 키로 쓸지, 로컬 bin 실행(`npx tsc`)과 원격 설치를 어떻게 구분할지,
+정상 빌드 훅(`npx node-gyp rebuild`, `npx prebuild-install`)의 빈도. 정상 데이터와 함께 측정한 뒤 별도 feature 또는 키 종류로 결정한다.
 - 같은 호출을 다른 파일로 옮기면 새 파일 쪽에서 추가로 센다.
 - 인자 리터럴: 문자열·숫자만 본다. 치환이 있는 템플릿 리터럴(`` `https://${host}/x` ``)의 고정 텍스트, 객체 리터럴의 키 이름,
   인자 범위 4,096자 이후는 서명에 들어가지 않는다. 문자열을 이어 붙인 값(`"ht" + "tp://..."`)은 조각 문자열 순서로 비교한다.

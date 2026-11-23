@@ -411,3 +411,108 @@ def test_undecodable_bytes_are_analyzed_not_dropped(tmp_path, extractor) -> None
     old, new = _pair(tmp_path, {"a.js": "1"}, {})
     (tmp_path / "new" / "a.js").write_bytes(b"\xff\xfe fetch('u');")
     assert extractor.extract(old, new)["addedNetworkCallCount"] == 1
+
+
+# --- 실제 악성 20쌍 검증 후 보완: 설치 훅 해석 ------------------------------------
+
+def test_bun_run_identifies_the_executed_file(tmp_path, extractor) -> None:
+    # D06 mini-shai-hulud 46쌍의 `bun run index.js`: 이전에는 'run'을 파일로 보아 None이었다
+    assert _hooks(tmp_path, extractor, {}, {"preinstall": "bun run index.js"}, new_files={"index.js": "1"}) == (True, 0)
+
+
+def test_deno_run_with_flags_identifies_the_executed_file(tmp_path, extractor) -> None:
+    assert _hooks(tmp_path, extractor, {}, {"postinstall": "deno run --allow-net src/main.ts"},
+                  new_files={"src/main.ts": "1"}) == (True, 0)
+
+
+def test_run_with_package_script_name_has_no_file_reference(tmp_path, extractor) -> None:
+    assert _hooks(tmp_path, extractor, {}, {"postinstall": "bun run build && node --run prepare"}) == (False, 0)
+
+
+def test_variable_interpreter_is_not_an_external_path(tmp_path, extractor) -> None:
+    # D06 kraken-api의 `$NODE lint.js`: 이전에는 외부 실행 1, 내부 lint.js는 놓쳤다
+    assert _hooks(tmp_path, extractor, {}, {"postinstall": "$NODE lint.js"}, new_files={"lint.js": "1"}) == (True, 0)
+    assert _hooks(tmp_path, extractor, {}, {"install": "${npm_node_execpath} ./x.js"}, new_files={"x.js": "1"}) == (True, 0)
+
+
+def test_variable_package_manager_with_script_name(tmp_path, extractor) -> None:
+    assert _hooks(tmp_path, extractor, {}, {"postinstall": "$npm_execpath run build"}) == (False, 0)
+
+
+def test_variable_prefixed_path_is_still_external(tmp_path, extractor) -> None:
+    assert _hooks(tmp_path, extractor, {}, {"postinstall": "$HOME/.cache/run.sh"}) == (False, 1)
+
+
+def test_bare_variable_as_execution_target_is_unknown_not_external(tmp_path, extractor) -> None:
+    assert _hooks(tmp_path, extractor, {}, {"postinstall": "node $SCRIPT"}) == (None, 0)
+
+
+def test_shell_builtins_are_not_programs(tmp_path, extractor) -> None:
+    old, new = _pair(tmp_path, {}, {"a.js": "1"}, {}, {"postinstall": "node a.js || true; : noop; exit 0"})
+    assert extractor.extract(old, new)["installHookNewProgramCount"] == 1  # node만
+
+
+def test_sudo_is_a_wrapper_with_value_options() -> None:
+    assert command_segments("sudo rm -rf --no-preserve-root /") == [["rm", "-rf", "--no-preserve-root", "/"]]
+    assert command_segments("sudo -u root -E node x.js") == [["node", "x.js"]]
+
+
+# --- 실제 악성 20쌍 검증 후 보완: C 유형 모듈 참조 ----------------------------------
+
+def test_concatenated_module_name_literal() -> None:
+    # D06 node-gyp-dll @pkgr/core의 require('chi'+'ld_pro'+'cess')
+    assert count_calls("const cp = require('chi' + 'ld_pro' + 'cess'); cp.spawn('rundll32', [x]);") == (1, 0)
+    assert count_calls("require('ht'+'tps').get('https://x');") == (0, 1)
+
+
+def test_create_require_alias_and_direct_call() -> None:
+    code = ("import { createRequire } from 'module';\n"
+            "const req = createRequire(import.meta.url);\n"
+            "const cp = req('child_process'); cp.execSync('id');\n"
+            "createRequire(import.meta.url)('child_process').spawn('x');\n"
+            "module.createRequire(__filename)('https').get(u);\n")
+    assert count_calls(code) == (2, 1)
+
+
+def test_stored_function_reference_then_called() -> None:
+    # D06 conventional-changelog의 var x = require('child_process').spawn
+    assert count_calls("var runner = require('child_process').spawn;\nrunner('sh', ['-c', cmd]);") == (1, 0)
+    assert count_calls("const cp = require('child_process'); const sp = cp.spawn; sp('a');") == (1, 0)
+
+
+def test_new_module_reference_forms_do_not_create_false_positives() -> None:
+    benign = [
+        "require('child_' + name).exec(x);",                      # 변수가 섞인 결합: 해석하지 않음
+        "require('./lib/' + 'util').exec(x);",                    # 다른 모듈
+        "const req = createRequire(import.meta.url); req('fs').readFileSync('a'); req('./exec.js').exec('b');",
+        "var runner = require('child_process').spawn;",           # 담기만 하고 호출 없음
+        "var runner = require('child_process').spawn; obj.runner('x'); this.runner('y');",
+        "const t = \"var r = require('chi'+'ld_process').exec; r('x')\";",  # 문자열 안
+        "const p = require('path'); const join = p.join; join('a', 'b');",
+        "const re = /x/g; const exec = re.exec; exec.call(re, s);",
+    ]
+    for code in benign:
+        assert count_calls(code) == (0, 0), code
+
+
+def test_call_on_require_result_is_not_treated_as_module_alias() -> None:
+    # 이전에는 child가 child_process alias로 잡혀 child.kill()·child.exec(...)을 셀 수 있었다
+    code = "const child = require('child_process').spawn('x'); child.on('exit', f); child.kill();"
+    assert count_calls(code) == (1, 0)
+
+
+def test_literal_bracket_member_access_on_module() -> None:
+    # D06 node-gyp-dll @pkgr/core: require('chi'+'ld_pro'+'cess')["sp"+"awn"]("rund"+"ll32", [...])
+    code = "require('chi'+'ld_pro'+'cess')[\"sp\"+\"awn\"](\"rund\"+\"ll32\", [p + ',main']);"
+    assert count_calls(code) == (1, 0)
+    assert count_calls("const cp = require('child_process'); cp['execSync']('id');") == (1, 0)
+
+
+def test_bracket_access_without_module_binding_or_with_variable_key_is_not_counted() -> None:
+    for code in [
+        "obj['exec']('x');",                                           # 모듈에 묶이지 않은 객체
+        "const cp = require('child_process'); cp[name]('x');",         # 변수 키: 해석하지 않음
+        "const re = /a/; re['exec'](s);",
+        "const p = require('path'); p['join']('a', 'b');",
+    ]:
+        assert count_calls(code) == (0, 0), code
