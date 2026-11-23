@@ -15,7 +15,22 @@ B 유형(새 의존성의 당시 버전 분석)은 별도 실험으로 남긴다
 |---|---|---|---|
 | `installHookNewProgramCount` | int ≥ 0 | new의 preinstall/install/postinstall 명령에 나오는 실행 프로그램 집합 − old의 집합의 크기 | 훅 명령을 셸 토큰으로 나누지 못함(따옴표 불일치), `scripts`가 객체가 아님, 훅 값이 문자열이 아님 |
 | `installHookArgsChanged` | bool | 양쪽에 있는 같은 훅에서 명령 토큰은 다르고 실행 프로그램 구성(중복 포함)은 같음 | 위와 같음 |
-| `installHookRefFileChanged` | bool | new 훅이 직접 실행하는 패키지 안 파일(`node x.js`, `sh x.sh`, `./x.sh`, node는 `x`→`x.js`/`x/index.js`)이 old에 없거나 내용이 다름 | 바뀐 참조 파일이 확인되지 않았고, 참조 중 하나라도 해석 불가(절대 경로, `..`, 패키지에 없음, symlink, 크기 상한 초과, source 없음). 훅 해석 실패 |
+| `installHookRefFileChanged` | bool | new 훅이 직접 실행하는 **패키지 내부** 파일(`node x.js`, `sh x.sh`, `./x.sh`, node는 `x`→`x.js`/`x/index.js`)이 old에 없거나 내용이 다름. 외부 실행 대상은 이 값에 넣지 않는다 | 바뀐 내부 파일이 확인되지 않았고, 내부 실행 대상 중 하나라도 확인 불가(패키지에 없음, symlink, 크기 상한 초과, source 없음). 훅 해석 실패 |
+| `installHookNewExternalExecCount` | int ≥ 0 | new 훅의 **외부 실행 대상** 중 old 훅에 없던 것의 수(아래 정의) | 훅 해석 실패, `scripts` 형식 오류 |
+
+**실행 대상**은 명령 위치의 경로(`./x`, `/x`, `~/x`, `$VAR/x`, 스크립트 확장자)와 인터프리터(node·sh·bash·python 등)의
+첫 파일 인자만이다. `cp /tmp/a b`, `node build.js /tmp/out`의 `/tmp/...`처럼 인자로만 쓰인 경로는 실행 대상이 아니다.
+
+**외부 실행 대상**(비교 키):
+- `path:` 절대 경로, `~`·`$VAR`로 시작하는 경로, `..`로 패키지 밖을 가리키는 경로
+- `download:` 같은 훅에서 `curl -o/--output`, `wget -O/--output-document`, `>`·`>>` 리디렉션으로 내려받은 파일(상대 경로 포함)
+- `pipe:` 다운로더 출력을 인터프리터로 파이프(`curl ... | sh`)
+
+old에도 같은 키가 있으면 세지 않는다(같은 외부 경로를 계속 실행하는 정상 설치기는 0, URL만 바뀐 경우는 `installHookArgsChanged`).
+외부 실행 자체를 악성 판정으로 쓰지 않는다. 내용을 읽지 않으므로 source가 없어도 계산된다.
+
+개선 전에는 외부 경로 실행이 `installHookRefFileChanged`를 None으로 만들어, "외부 경로를 실행한다"는 정보와
+"파일을 분석할 수 없다"는 상황이 같은 결측으로 섞였다.
 | `addedProcExecCallCount` | int ≥ 0 | **새로 생기거나 바뀐 호출 지점 수.** 추가·변경된 JS 파일마다 new의 호출 서명 multiset에서 old 같은 경로의 multiset을 뺀 개수의 합. 대상 API: `child_process`의 exec/execSync/execFile/execFileSync/spawn/spawnSync/fork | 소스 수집 실패(source 없음, 파일 수·크기 상한, 디렉터리 읽기 오류) |
 | `addedNetworkCallCount` | int ≥ 0 | 같은 방식. 대상 API: http/https(request·get), http2.connect, net(connect·createConnection·Socket), tls.connect, dgram.createSocket, dns 조회, HTTP 라이브러리(axios, node-fetch, got, undici, ws 등) 호출, 전역 `fetch(`, `new WebSocket/XMLHttpRequest/EventSource(`, `navigator.sendBeacon(` | 위와 같음 |
 
@@ -34,7 +49,7 @@ B 유형(새 의존성의 당시 버전 분석)은 별도 실험으로 남긴다
 | `exec(cmd)` → `exec(otherCmd)` (변수로만 전달된 대상 변경) | **0 (한계)** |
 
 훅이 없거나 바뀐 JS 파일이 없으면 0/False이며 결측이 아니다.
-A 유형은 source가 없어도 계산된다(`installHookRefFileChanged`는 참조가 있으면 None).
+A 유형은 source가 없어도 계산된다(`installHookRefFileChanged`는 내부 실행 대상이 있으면 None).
 
 ### 처음 제안에서 바꾼 점과 이유
 
@@ -100,8 +115,8 @@ depbee-analyzer batch-manifest --manifest ../npm-malware-package-pairs/derived/p
 
 - 행 전체 실패(errors.csv): registry에서 내려간 버전·tarball, archive 루트 해석 실패, 소스 파일 5,000개 초과 등 로더·수집기 오류.
   D06 데이터 README에 추출 불가 사례가 기록돼 있다(예: 파일 수 초과 1건, `cit-playwright-tests` 루트 문제는 registry로 대체).
-- feature 결측: 훅이 패키지 밖 파일(`/tmp/...`)을 실행하는 악성 훅은 `installHookRefFileChanged`가 None이 되기 쉽다.
-  대신 `installHookNewProgramCount`가 커진다. 이 결측은 악성과 상관될 수 있으므로 결측 여부를 정보로 보는지 팀이 정해야 한다.
+- feature 결측: 패키지 밖 파일 실행은 이제 결측이 아니라 `installHookNewExternalExecCount`로 센다.
+  `installHookRefFileChanged`의 None은 내부 경로인데 파일이 없는 경우(예: 빌드 산출물이 tarball에 빠짐)에 남는다.
 - 정상 패키지도 설치 훅을 새로 넣거나 install 스크립트를 바꾼다(Hard benign 10쌍 점검에서 `installHookNewProgramCount=1`이 흔했다).
 
 ## depbee에서 나중에 바꿀 항목 (현재 변경하지 않음)
@@ -111,5 +126,5 @@ depbee-analyzer batch-manifest --manifest ../npm-malware-package-pairs/derived/p
   모델 manifest의 `feature_names`에 따라 필요한 extractor를 고르는 방식.
 - feature 스키마 이름(`depbee-features-v1` → v2 등)과 계약 문서(`docs/contracts.md`).
 - 모델 manifest: `feature_names`(29+X1 순서), `boolean_features`에 `installHookArgsChanged`·`installHookRefFileChanged`,
-  `nullable_features`에 X1 5개 전부.
+  `nullable_features`에 X1 6개 전부.
 - 분석 시간 상한: X1은 바뀐 JS 파일마다 old/new를 한 번씩 더 읽고 문자 단위로 훑는다.

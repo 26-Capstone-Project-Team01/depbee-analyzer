@@ -6,9 +6,11 @@ npm install도 하지 않는다. 파일은 snapshot.source_dir 아래에서 읽�
 결측(None) 규칙: 계산할 수 없는 경우만 None이고, 계산했는데 해당 행동이 없으면 0/False다.
 - A 유형: install 훅 명령을 셸 토큰으로 나누지 못하거나(따옴표 불일치 등) scripts 형식이
   잘못되면 None. 훅이 없으면 0/False.
-- installHookRefFileChanged: 훅이 참조하는 파일을 패키지 안에서 찾지 못하거나(절대 경로,
-  패키지 밖 경로, 없는 파일, symlink, 크기 상한 초과) source가 없으면, 바뀐 참조 파일이
-  하나도 확인되지 않은 경우에 한해 None.
+- installHookRefFileChanged: 패키지 **내부** 실행 대상 파일만 본다. 내부 경로인데 파일을 찾지 못하거나
+  (없는 파일, symlink, 크기 상한 초과) source가 없으면, 바뀐 내부 파일이 하나도 확인되지 않은 경우에 한해 None.
+  외부 실행 대상(패키지 밖 경로, 설치 중 내려받은 파일, 다운로드 파이프)은 이 값에 영향을 주지 않는다.
+- installHookNewExternalExecCount: new 훅에만 있는 외부 실행 대상 수. 파일 내용을 읽지 않으므로 source가
+  없어도 계산된다. 외부 실행 자체를 악성 판정으로 쓰지 않는다(정상 설치기도 내려받아 실행한다).
 - C 유형: 새로 생기거나 바뀐 호출 지점 수(호출 서명 = API + 인자의 문자열·숫자 리터럴, added_call_features 참고).
   소스 파일 수집이 실패하면(source 없음, 파일 수·크기 상한, 디렉터리 읽기 오류) None.
   바뀐 JS 파일이 없으면 0.
@@ -19,6 +21,7 @@ npm install도 하지 않는다. 파일은 snapshot.source_dir 아래에서 읽�
 
 from __future__ import annotations
 
+import posixpath
 import re
 import shlex
 from collections import Counter
@@ -37,10 +40,13 @@ from depbee_analyzer.core.source_files import (
 from depbee_analyzer.extractors.base import BaseExtractor
 from depbee_analyzer.extractors.package_json import INSTALL_SCRIPT_KEYS
 
-FEATURE_NAMES = (
+HOOK_FEATURE_NAMES = (
     "installHookNewProgramCount",
     "installHookArgsChanged",
     "installHookRefFileChanged",
+    "installHookNewExternalExecCount",
+)
+FEATURE_NAMES = HOOK_FEATURE_NAMES + (
     "addedProcExecCallCount",
     "addedNetworkCallCount",
 )
@@ -96,44 +102,117 @@ def _tokens(command: str) -> list[str]:
         raise _HookParseError(str(exc)) from exc
 
 
-def command_segments(command: str, _depth: int = 0) -> list[list[str]]:
-    """셸 명령을 단순 명령 단위 토큰 목록으로 나눈다. 앞의 환경 변수 대입과 래퍼는 뺀다.
+#: 단순 명령 하나: 토큰, 앞 연산자(첫 명령은 None), 출력 리디렉션 대상(`>`, `>>`).
+_Command = tuple[list[str], str | None, list[str]]
+
+
+def _split_commands(command: str, _depth: int = 0) -> list[_Command]:
+    """셸 명령을 단순 명령 단위로 나눈다. 앞의 환경 변수 대입과 래퍼는 뺀다.
 
     `sh -c "..."`·`bash -c "..."`의 인자는 한 단계 더 나눠 그 안의 명령도 포함한다.
     `$(...)` 명령 치환과 변수 확장은 해석하지 않는다(정적 한계).
     """
-    segments: list[list[str]] = []
+    raw: list[_Command] = []
     current: list[str] = []
-    skip_next = False
+    outputs: list[str] = []
+    op: str | None = None
+    pending_redirect: str | None = None
     for token in _tokens(command):
-        if skip_next:
-            skip_next = False
+        if pending_redirect is not None:
+            if pending_redirect in (">", ">>", ">|", "&>"):
+                outputs.append(token)
+            pending_redirect = None
             continue
         if token in _REDIRECT:
-            skip_next = True
+            pending_redirect = token
             continue
         if token in _CONTROL:
             if current:
-                segments.append(current)
-            current = []
+                raw.append((current, op, outputs))
+            current, outputs, op = [], [], token
             continue
         current.append(token)
     if current:
-        segments.append(current)
+        raw.append((current, op, outputs))
 
-    result: list[list[str]] = []
-    for segment in segments:
+    result: list[_Command] = []
+    for segment, previous_op, redirect_outputs in raw:
         while segment and (_ASSIGNMENT.match(segment[0]) or segment[0] in _WRAPPERS):
             segment = segment[1:]
         if not segment:
             continue
-        result.append(segment)
+        result.append((segment, previous_op, redirect_outputs))
         program = PurePosixPath(segment[0]).name
         if program in _SHELLS and _depth < 2 and "-c" in segment[1:]:
             index = segment.index("-c", 1)
             if index + 1 < len(segment):
-                result.extend(command_segments(segment[index + 1], _depth + 1))
+                result.extend(_split_commands(segment[index + 1], _depth + 1))
     return result
+
+
+def command_segments(command: str) -> list[list[str]]:
+    """셸 명령의 단순 명령 토큰 목록(_split_commands에서 연산자·리디렉션 정보를 뺀 것)."""
+    return [segment for segment, _, _ in _split_commands(command)]
+
+
+_DOWNLOADERS = frozenset({"curl", "wget"})
+
+
+def _download_outputs(segment: list[str], redirect_outputs: list[str]) -> list[str]:
+    """curl/wget 명령이 내려받아 쓰는 파일 경로(`-o`, `--output`, wget `-O`, `>` 리디렉션)."""
+    program = PurePosixPath(segment[0]).name
+    if program not in _DOWNLOADERS:
+        return []
+    short, long_ = ("o", "--output") if program == "curl" else ("O", "--output-document")
+    paths = list(redirect_outputs)
+    args = segment[1:]
+    for i, arg in enumerate(args):
+        if arg.startswith(long_ + "="):
+            paths.append(arg.split("=", 1)[1])
+        elif (arg == long_ or (arg.startswith("-") and not arg.startswith("--") and arg.endswith(short))) \
+                and i + 1 < len(args):
+            paths.append(args[i + 1])
+        elif arg.startswith("-" + short) and len(arg) > 2 and not arg.startswith("--"):
+            paths.append(arg[2:])  # -o/tmp/x, -O-
+    return [p for p in paths if p and p != "-"]
+
+
+def _external_target(ref: str, downloaded: set[str]) -> str | None:
+    """실행 대상 경로가 패키지 밖이거나 설치 중 내려받은 파일이면 비교용 키. 아니면 None."""
+    normalized = posixpath.normpath(ref)
+    if normalized in downloaded:
+        return f"download:{normalized}"
+    if ref.startswith(("/", "~", "$")) or normalized == ".." or normalized.startswith("../"):
+        return f"path:{normalized}"
+    return None
+
+
+def _hook_targets(commands: list[_Command]) -> tuple[list[tuple[str, bool]], set[str]]:
+    """훅 하나의 (패키지 내부 실행 대상, 외부 실행 대상 키 집합).
+
+    실행 대상은 _referenced_paths가 고른 위치(명령 위치의 경로, 인터프리터의 첫 파일 인자)만 본다.
+    `cp /tmp/a b`처럼 인자로만 쓰인 경로는 실행 대상이 아니다.
+    """
+    internal: list[tuple[str, bool]] = []
+    external: set[str] = set()
+    downloaded: set[str] = set()
+    previous: list[str] | None = None
+    for segment, op, redirect_outputs in commands:
+        program = PurePosixPath(segment[0]).name
+        refs = _referenced_paths(segment)
+        if op in ("|", "|&") and previous is not None and program in _INTERPRETERS and not refs:
+            previous_program = PurePosixPath(previous[0]).name
+            if previous_program in _DOWNLOADERS:
+                external.add(f"pipe:{previous_program}|{program}")  # curl ... | sh
+        for ref, node_like in refs:
+            key = _external_target(ref, downloaded)
+            if key is None:
+                internal.append((ref, node_like))
+            else:
+                external.add(key)
+        downloaded.update(posixpath.normpath(p) for p in _download_outputs(segment, redirect_outputs))
+        previous = segment
+    return internal, external
 
 
 def _programs(segments: list[list[str]]) -> list[str]:
@@ -146,7 +225,7 @@ def _referenced_paths(segment: list[str]) -> list[tuple[str, bool]]:
     program = PurePosixPath(head).name
     refs: list[tuple[str, bool]] = []
     if program not in _INTERPRETERS and (
-        head.startswith(("./", "../", "/")) or head.endswith(_SCRIPT_SUFFIXES)
+        head.startswith(("./", "../", "/", "~/", "$")) or head.endswith(_SCRIPT_SUFFIXES)
     ):
         refs.append((head, False))
     if program in _INTERPRETERS:
@@ -206,10 +285,12 @@ def install_hook_features(
     old: PackageVersionSnapshot, new: PackageVersionSnapshot, max_file_bytes: int = MAX_FILE_BYTES
 ) -> dict[str, Any]:
     try:
-        old_hooks = {k: command_segments(v) for k, v in _install_hooks(old.package_json).items()}
-        new_hooks = {k: command_segments(v) for k, v in _install_hooks(new.package_json).items()}
+        old_commands = {k: _split_commands(v) for k, v in _install_hooks(old.package_json).items()}
+        new_commands = {k: _split_commands(v) for k, v in _install_hooks(new.package_json).items()}
     except _HookParseError:
-        return {name: None for name in FEATURE_NAMES[:3]}
+        return {name: None for name in HOOK_FEATURE_NAMES}
+    old_hooks = {k: [s for s, _, _ in v] for k, v in old_commands.items()}
+    new_hooks = {k: [s for s, _, _ in v] for k, v in new_commands.items()}
 
     old_programs = {p for segments in old_hooks.values() for p in _programs(segments)}
     new_programs = {p for segments in new_hooks.values() for p in _programs(segments)}
@@ -220,26 +301,32 @@ def install_hook_features(
         for key in new_hooks.keys() & old_hooks.keys()
     )
 
+    old_external: set[str] = set()
+    for commands in old_commands.values():
+        old_external |= _hook_targets(commands)[1]
+    new_external: set[str] = set()
     changed, unresolved = False, False
-    for segments in new_hooks.values():
-        for segment in segments:
-            for ref, node_like in _referenced_paths(segment):
-                resolved = _resolve(new.source_dir, ref, node_like, max_file_bytes)
-                if resolved is None:
-                    unresolved = True
-                    continue
-                relative, content = resolved
-                previous = _read_relative(old.source_dir, relative, max_file_bytes)
-                if previous is None:
-                    unresolved = True
-                elif previous is False or previous != content:
-                    changed = True
+    for commands in new_commands.values():
+        internal, external = _hook_targets(commands)
+        new_external |= external
+        for ref, node_like in internal:
+            resolved = _resolve(new.source_dir, ref, node_like, max_file_bytes)
+            if resolved is None:
+                unresolved = True  # 패키지 안 파일이어야 하는데 확인할 수 없음
+                continue
+            relative, content = resolved
+            previous = _read_relative(old.source_dir, relative, max_file_bytes)
+            if previous is None:
+                unresolved = True
+            elif previous is False or previous != content:
+                changed = True
     ref_changed: bool | None = True if changed else (None if unresolved else False)
 
     return {
         "installHookNewProgramCount": len(new_programs - old_programs),
         "installHookArgsChanged": args_changed,
         "installHookRefFileChanged": ref_changed,
+        "installHookNewExternalExecCount": len(new_external - old_external),
     }
 
 
