@@ -1,7 +1,9 @@
 from depbee_analyzer.extractors.base import BaseExtractor
 from depbee_analyzer.extractors.code_context import CodeContextExtractor
+from depbee_analyzer.extractors.dependency_change import DependencyChangeExtractor
 from depbee_analyzer.extractors.obfuscation import ObfuscationExtractor
 from depbee_analyzer.extractors.package_json import PackageJsonExtractor
+from depbee_analyzer.extractors.x3_context import X3ContextExtractor
 
 #: 새 extractor가 추가되면 이 dict에 한 줄만 등록하면 된다.
 #: --extractors 플래그가 생략되면 이 registry에 등록된 전체가 기본 실행된다.
@@ -16,6 +18,8 @@ EXTRACTOR_REGISTRY: dict[str, type[BaseExtractor]] = {
 #: 예: --extractors package_json,obfuscation,code_context
 OPTIONAL_EXTRACTOR_REGISTRY: dict[str, type[BaseExtractor]] = {
     "code_context": CodeContextExtractor,
+    "x3_context": X3ContextExtractor,
+    "dependency_change": DependencyChangeExtractor,
 }
 
 __all__ = ["BaseExtractor", "EXTRACTOR_REGISTRY", "OPTIONAL_EXTRACTOR_REGISTRY"]
